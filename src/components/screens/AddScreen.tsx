@@ -344,8 +344,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
                           ref={idx === 0 ? imgRef : undefined}
                           src={image}
                           alt={`撮影画像${idx+1}`}
-                          className="object-contain"
-                          style={{ maxWidth: '100%', maxHeight: '300px', width: 'auto', height: 'auto' }}
+                          className="max-img-preview"
                         />
                       </ReactCrop>
                       {crops.length > 1 && (
@@ -370,7 +369,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
               ) : (
                 <div className="flex justify-center items-center bg-gray-100 rounded-lg" style={{ minHeight: 180, maxHeight: 300 }}>
                   <div>
-                    <img src={image} alt="撮影画像" style={{ transform: `rotate(${rotation}deg)` }} />
+                    <img src={image} alt="撮影画像" style={{ transform: `rotate(${rotation}deg)` }} className="max-img-preview" />
                     <button onClick={() => setRotation(rotation + 90)}>↻ 右回転</button>
                     <button onClick={() => setRotation(rotation - 90)}>↺ 左回転</button>
                   </div>
