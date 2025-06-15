@@ -85,21 +85,59 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // EXIF読み取り
-      EXIF.getData(file, function() {
-        const orientation = EXIF.getTag(this, 'Orientation');
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const arrayBuffer = e.target?.result;
+        if (!arrayBuffer) return;
+        // EXIFからorientation取得
+        const view = new DataView(arrayBuffer as ArrayBuffer);
+        const orientation = EXIF.readFromBinaryFile(view)?.Orientation || 1;
         imageToDataURLWithOrientation(file, orientation).then(imageDataURL => {
           setImage(imageDataURL); // 表示・保存用
           // OCR用前処理はここで実施
         });
-      });
+      };
+      reader.readAsArrayBuffer(file);
     }
   };
 
   // orientationに応じてcanvasで回転補正
-  async function imageToDataURLWithOrientation(file, orientation) {
-    // File→Image→Canvas→DataURLの流れで回転補正
-    // ...実装例は省略（必要なら詳細コード出します）
+  async function imageToDataURLWithOrientation(file: File, orientation: number): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+        // 回転補正
+        if (orientation > 4) {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+        switch (orientation) {
+          case 3:
+            ctx.rotate(Math.PI);
+            ctx.drawImage(img, -img.width, -img.height);
+            break;
+          case 6:
+            ctx.rotate(0.5 * Math.PI);
+            ctx.drawImage(img, 0, -img.height);
+            break;
+          case 8:
+            ctx.rotate(-0.5 * Math.PI);
+            ctx.drawImage(img, -img.width, 0);
+            break;
+          default:
+            ctx.drawImage(img, 0, 0);
+        }
+        resolve(canvas.toDataURL('image/jpeg'));
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    });
   }
 
   const handleTagToggle = (tag: string) => {
