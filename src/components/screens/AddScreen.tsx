@@ -120,6 +120,9 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const getCroppedImage = async (crop: Crop): Promise<string | null> => {
     if (!imgRef.current || !crop.width || !crop.height) return null;
     const image = imgRef.current;
+    // 画像がまだロードされていない場合は待つ
+    if (!image.complete || image.naturalWidth === 0) return null;
+
     const canvas = document.createElement('canvas');
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
@@ -141,8 +144,13 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     // Rustでリサイズ（例: 幅600px, 高さ自動 or 固定値）
     const croppedDataUrl = canvas.toDataURL('image/jpeg');
     const base64 = croppedDataUrl.split(',')[1];
-    const resizedBase64 = await rustResizeImage(base64, 600, 800);
-    return 'data:image/png;base64,' + resizedBase64;
+    try {
+      const resizedBase64 = await rustResizeImage(base64, 600, 800);
+      return 'data:image/png;base64,' + resizedBase64;
+    } catch (e) {
+      console.error('rustResizeImage error:', e);
+      return null;
+    }
   };
 
   // OCR実行
