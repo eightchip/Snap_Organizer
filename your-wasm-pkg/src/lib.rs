@@ -4,6 +4,8 @@ use imageproc::contrast::threshold;
 use imageproc::filter::gaussian_blur_f32;
 use imageproc::geometric_transformations::{rotate_about_center, Interpolation};
 use imageproc::morphology::{dilate, erode};
+use imageproc::distance_transform::Norm;
+use std::io::Cursor;
 
 #[wasm_bindgen]
 pub fn preprocess_image(image_data: &[u8]) -> Vec<u8> {
@@ -17,7 +19,7 @@ pub fn preprocess_image(image_data: &[u8]) -> Vec<u8> {
     let binarized = threshold(&gray, 128);
     
     // ノイズ除去（モルフォロジー演算）
-    let denoised = erode(&dilate(&binarized, 1), 1);
+    let denoised = erode(&dilate(&binarized, Norm::L1, 1), Norm::L1, 1);
     
     // コントラスト強調
     let mut contrast = denoised.clone();
@@ -28,8 +30,8 @@ pub fn preprocess_image(image_data: &[u8]) -> Vec<u8> {
     }
     
     // 画像をPNGとしてエンコード
-    let mut buf = Vec::new();
+    let mut buf = Cursor::new(Vec::new());
     contrast.write_to(&mut buf, ImageFormat::Png).unwrap();
     
-    buf
+    buf.into_inner()
 }
