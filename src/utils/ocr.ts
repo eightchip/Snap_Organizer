@@ -1,18 +1,85 @@
-// Mock OCR functionality - in production, this would integrate with a real OCR service
-export const extractTextFromImage = async (imageFile: File): Promise<string> => {
-  // Simulate OCR processing time
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // Generate mock OCR text based on image name or random content
-  const mockTexts = [
-    "郵便番号 123-4567\n東京都渋谷区神南1-2-3\n山田太郎様\n重要なお知らせ",
-    "会議資料\n2024年3月15日\nプロジェクト進捗について\n・開発進捗 80%\n・テスト完了予定 3月末",
-    "旅行メモ\n京都観光\n清水寺 - 午前中訪問\n嵐山 - 竹林散策\n金閣寺 - 夕方",
-    "買い物リスト\n牛乳\nパン\n卵\nりんご\nヨーグルト",
-    "レシート\nコンビニ ABC\n2024/03/15 14:23\nお弁当 ¥480\n飲み物 ¥120\n合計 ¥600"
-  ];
-  
-  return mockTexts[Math.floor(Math.random() * mockTexts.length)];
+import Tesseract from 'tesseract.js';
+
+// 画像を幅600pxにリサイズ＋グレースケール＋大津の方法で二値化
+export const preprocessImageOtsu600 = (imageDataUrl: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const maxWidth = 600;
+      const scale = Math.min(1, maxWidth / img.width);
+      const width = Math.round(img.width * scale);
+      const height = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      // グレースケール
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const avg = (imageData.data[i] + imageData.data[i+1] + imageData.data[i+2]) / 3;
+        imageData.data[i] = imageData.data[i+1] = imageData.data[i+2] = avg;
+      }
+      // 大津の方法
+      const threshold = otsuThreshold(imageData.data);
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const value = imageData.data[i] > threshold ? 255 : 0;
+        imageData.data[i] = imageData.data[i+1] = imageData.data[i+2] = value;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL());
+    };
+    img.src = imageDataUrl;
+  });
+};
+
+function otsuThreshold(gray: Uint8ClampedArray) {
+  let hist = new Array(256).fill(0);
+  for (let i = 0; i < gray.length; i += 4) hist[gray[i]]++;
+  let total = gray.length / 4;
+  let sum = 0;
+  for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0, wB = 0, wF = 0, varMax = 0, threshold = 0;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    wF = total - wB;
+    if (wF === 0) break;
+    sumB += t * hist[t];
+    let mB = sumB / wB;
+    let mF = (sum - sumB) / wF;
+    let varBetween = wB * wF * (mB - mF) * (mB - mF);
+    if (varBetween > varMax) {
+      varMax = varBetween;
+      threshold = t;
+    }
+  }
+  return threshold;
+}
+
+// Tesseract.js OCR（20秒タイムアウト）
+export const runTesseractOcr = async (file: File, timeoutMs = 20000): Promise<string> => {
+  const imageDataUrl = await imageToDataURL(file);
+  const preprocessed = await preprocessImageOtsu600(imageDataUrl);
+  const ocrPromise = Tesseract.recognize(
+    preprocessed,
+    'jpn',
+    {
+      logger: m => console.log(m),
+      // @ts-ignore
+      params: { tessedit_pageseg_mode: '6' },
+    }
+  ).then(res => res.data.text);
+  const timeoutPromise = new Promise<string>((_, reject) =>
+    setTimeout(() => reject(new Error('OCRタイムアウト')), timeoutMs)
+  );
+  return Promise.race([ocrPromise, timeoutPromise]);
+};
+
+// Google Cloud Vision OCR（プレースホルダー）
+export const runGoogleCloudOcr = async (file: File): Promise<string> => {
+  // TODO: 実装時に.envからAPIキーを取得し、APIリクエストを送信
+  throw new Error('Google Cloud Vision OCRは未実装です');
 };
 
 export const imageToDataURL = (file: File): Promise<string> => {

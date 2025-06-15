@@ -29,11 +29,12 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
       onClick={onClick}
       className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
     >
-      <div className="aspect-[16/9] bg-gray-100 overflow-hidden">
+      <div className="bg-gray-100 overflow-hidden flex items-center justify-center" style={{ height: 160 }}>
         <img
           src={item.image}
           alt="撮影画像"
-          className="w-full h-full object-cover"
+          className="max-h-full max-w-full object-contain"
+          style={{ width: '100%', height: 'auto' }}
         />
       </div>
       

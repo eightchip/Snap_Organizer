@@ -7,6 +7,7 @@ interface TagChipProps {
   onClick?: () => void;
   removable?: boolean;
   onRemove?: () => void;
+  style?: React.CSSProperties;
 }
 
 const TAG_COLORS: Record<string, string> = {
@@ -22,7 +23,8 @@ export const TagChip: React.FC<TagChipProps> = ({
   count,
   onClick,
   removable = false,
-  onRemove
+  onRemove,
+  style
 }) => {
   const colorClass = TAG_COLORS[tag] || 'bg-gray-100 text-gray-800 border-gray-200';
   const selectedClass = selected ? 'ring-2 ring-blue-500 ring-opacity-50' : '';
@@ -33,6 +35,7 @@ export const TagChip: React.FC<TagChipProps> = ({
         onClick ? 'hover:shadow-md hover:scale-105' : ''
       }`}
       onClick={onClick}
+      style={style}
     >
       #{tag}
       {count !== undefined && (

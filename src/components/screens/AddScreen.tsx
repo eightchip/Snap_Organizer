@@ -1,7 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { Camera, Upload, Loader2, ArrowLeft, Check } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff } from 'lucide-react';
 import { TagChip } from '../TagChip';
-import { extractTextFromImage, imageToDataURL } from '../../utils/ocr';
+import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/ocr';
+import ReactCrop, { Crop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 
 interface AddScreenProps {
   onSave: (data: {
@@ -23,17 +25,35 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [ocrMode, setOcrMode] = useState<'full' | 'crop'>('full');
+  const [crops, setCrops] = useState<Crop[]>([{ unit: '%', width: 50, height: 30, x: 25, y: 35 }]);
+  const [cropResults, setCropResults] = useState<string[]>([]);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [useCloudOcr, setUseCloudOcr] = useState(false);
+  const [tags, setTags] = useState(() => {
+    const saved = localStorage.getItem('postal_tags');
+    return saved ? JSON.parse(saved) : [
+      { name: '仕事', color: '#3B82F6' },
+      { name: '趣味', color: '#22C55E' },
+      { name: '旅行', color: '#A78BFA' },
+      { name: '郵便物', color: '#F59E42' },
+    ];
+  });
+  const [isListening, setIsListening] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('postal_tags');
+    if (saved) setTags(JSON.parse(saved));
+  }, []);
 
   const processImage = async (file: File) => {
     setIsProcessing(true);
     try {
-      const [imageDataURL, extractedText] = await Promise.all([
-        imageToDataURL(file),
-        extractTextFromImage(file)
-      ]);
-      
+      const imageDataURL = await imageToDataURL(file);
       setImage(imageDataURL);
-      setOcrText(extractedText);
+      setOcrText('');
+      setCropResults([]);
+      setCrops([{ unit: '%', width: 50, height: 30, x: 25, y: 35 }]);
     } catch (error) {
       console.error('画像処理エラー:', error);
       alert('画像の処理中にエラーが発生しました');
@@ -73,6 +93,114 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
   const canSave = image && ocrText.trim();
 
+  // 範囲指定で画像を切り出す
+  const getCroppedImage = async (crop: Crop): Promise<string | null> => {
+    if (!imgRef.current || !crop.width || !crop.height) return null;
+    const image = imgRef.current;
+    const canvas = document.createElement('canvas');
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+    canvas.width = Math.round((crop.width as number) * scaleX);
+    canvas.height = Math.round((crop.height as number) * scaleY);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(
+      image,
+      Math.round((crop.x as number) * scaleX),
+      Math.round((crop.y as number) * scaleY),
+      Math.round((crop.width as number) * scaleX),
+      Math.round((crop.height as number) * scaleY),
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+    return canvas.toDataURL('image/jpeg');
+  };
+
+  // OCR実行
+  const handleOcr = async () => {
+    setIsProcessing(true);
+    try {
+      let extractedText = '';
+      if (useCloudOcr) {
+        alert('Google Cloud Vision OCRは未実装です');
+        setIsProcessing(false);
+        return;
+      }
+      if (ocrMode === 'full') {
+        extractedText = await runTesseractOcr(dataURLtoFile(image, 'image.jpg'));
+        setOcrText(extractedText);
+      } else if (ocrMode === 'crop') {
+        const results: string[] = [];
+        for (const crop of crops) {
+          const cropped = await getCroppedImage(crop);
+          if (cropped) {
+            const text = await runTesseractOcr(dataURLtoFile(cropped, 'crop.jpg'));
+            results.push(text.trim());
+          } else {
+            results.push('');
+          }
+        }
+        setCropResults(results);
+        setOcrText(results.filter(Boolean).join('\n'));
+      }
+    } catch (error) {
+      console.error('画像処理エラー:', error);
+      alert('画像の処理中にエラーが発生しました');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // DataURL→File変換
+  function dataURLtoFile(dataurl: string, filename: string): File {
+    const arr = dataurl.split(',');
+    const match = arr[0].match(/:(.*?);/);
+    const mime = match ? match[1] : 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length, u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    return new File([u8arr], filename, { type: mime });
+  }
+
+  // 範囲追加・削除
+  const handleAddCrop = () => {
+    if (crops.length < 3) {
+      setCrops([...crops, { unit: '%', width: 50, height: 30, x: 25, y: 35 }]);
+    }
+  };
+  const handleRemoveCrop = (idx: number) => {
+    if (crops.length > 1) {
+      setCrops(crops.filter((_, i) => i !== idx));
+      setCropResults(cropResults.filter((_, i) => i !== idx));
+    }
+  };
+
+  // 音声入力
+  const handleVoiceInput = () => {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert('このブラウザは音声認識に対応していません');
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setMemo(prev => prev ? prev + '\n' + transcript : transcript);
+    };
+
+    recognition.start();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -108,7 +236,37 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         {/* Image Capture */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">写真を撮影</h2>
-          
+          {/* OCR方式選択チェックボックス */}
+          {image && (
+            <div className="flex items-center gap-4 mb-2">
+              <label className="flex items-center gap-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={useCloudOcr}
+                  onChange={e => setUseCloudOcr(e.target.checked)}
+                />
+                Google Cloud Visionで認識する（β）
+              </label>
+            </div>
+          )}
+          {/* OCRモード切り替えボタン */}
+          {image && (
+            <div className="flex gap-2 mb-2">
+              <button
+                className={`px-3 py-1 rounded ${ocrMode === 'full' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                onClick={() => setOcrMode('full')}
+              >全体OCR</button>
+              <button
+                className={`px-3 py-1 rounded ${ocrMode === 'crop' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                onClick={() => setOcrMode('crop')}
+              >範囲指定OCR</button>
+              <button
+                className="px-3 py-1 rounded bg-green-500 text-white ml-auto"
+                onClick={handleOcr}
+                disabled={isProcessing}
+              >OCR実行</button>
+            </div>
+          )}
           {!image && (
             <div className="space-y-3">
               <button
@@ -131,15 +289,58 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
           {image && (
             <div className="space-y-3">
-              <img
-                src={image}
-                alt="撮影画像"
-                className="w-full rounded-lg border border-gray-200"
-              />
+              {ocrMode === 'crop' ? (
+                <>
+                  {crops.map((crop, idx) => (
+                    <div key={idx} className="mb-2 relative">
+                      <ReactCrop
+                        crop={crop}
+                        onChange={c => setCrops(crops.map((v, i) => i === idx ? c : v))}
+                        aspect={undefined}
+                      >
+                        <img
+                          ref={idx === 0 ? imgRef : undefined}
+                          src={image}
+                          alt={`撮影画像${idx+1}`}
+                          className="object-contain"
+                          style={{ maxWidth: '100%', maxHeight: '300px', width: 'auto', height: 'auto' }}
+                        />
+                      </ReactCrop>
+                      {crops.length > 1 && (
+                        <button
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded px-2 py-1 text-xs"
+                          onClick={() => handleRemoveCrop(idx)}
+                        >削除</button>
+                      )}
+                      {cropResults[idx] && (
+                        <div className="mt-1 text-xs text-gray-600 bg-gray-100 rounded p-2 whitespace-pre-wrap">
+                          {cropResults[idx]}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    className="px-3 py-1 rounded bg-blue-200 text-blue-800"
+                    onClick={handleAddCrop}
+                    disabled={crops.length >= 3}
+                  >＋範囲追加（最大3）</button>
+                </>
+              ) : (
+                <div className="flex justify-center items-center bg-gray-100 rounded-lg" style={{ minHeight: 180, maxHeight: 300 }}>
+                  <img
+                    src={image}
+                    alt="撮影画像"
+                    className="object-contain"
+                    style={{ maxWidth: '100%', maxHeight: '300px', width: 'auto', height: 'auto' }}
+                  />
+                </div>
+              )}
               <button
                 onClick={() => {
                   setImage('');
                   setOcrText('');
+                  setCropResults([]);
+                  setCrops([{ unit: '%', width: 50, height: 30, x: 25, y: 35 }]);
                 }}
                 className="text-sm text-blue-500 hover:text-blue-600"
               >
@@ -178,10 +379,22 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
         {ocrText && (
           <div className="bg-white rounded-xl p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              抽出されたテキスト
-            </h2>
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 mb-0">
+                抽出されたテキスト
+              </h2>
+              <button
+                className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                onClick={() => {
+                  const textarea = document.getElementById('ocr-textarea');
+                  if (textarea) (textarea as HTMLTextAreaElement).select();
+                }}
+              >
+                全選択
+              </button>
+            </div>
             <textarea
+              id="ocr-textarea"
               value={ocrText}
               onChange={(e) => setOcrText(e.target.value)}
               className="w-full h-32 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -194,12 +407,13 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
           <div className="flex flex-wrap gap-2">
-            {AVAILABLE_TAGS.map(tag => (
+            {tags.map(tag => (
               <TagChip
-                key={tag}
-                tag={tag}
-                selected={selectedTags.includes(tag)}
-                onClick={() => handleTagToggle(tag)}
+                key={tag.name}
+                tag={tag.name}
+                selected={selectedTags.includes(tag.name)}
+                onClick={() => handleTagToggle(tag.name)}
+                style={{ backgroundColor: tag.color + '22', color: tag.color }}
               />
             ))}
           </div>
@@ -208,12 +422,22 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         {/* Memo */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">メモ</h2>
-          <textarea
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="追加のメモを入力..."
-          />
+          <div className="flex items-center gap-2">
+            <textarea
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="追加のメモを入力..."
+            />
+            <button
+              type="button"
+              className={`p-2 rounded-full ${isListening ? 'bg-blue-100' : 'bg-gray-100'} ml-2`}
+              onClick={handleVoiceInput}
+              title="音声入力"
+            >
+              {isListening ? <MicOff className="w-5 h-5 text-blue-500" /> : <Mic className="w-5 h-5 text-gray-500" />}
+            </button>
+          </div>
         </div>
       </div>
     </div>

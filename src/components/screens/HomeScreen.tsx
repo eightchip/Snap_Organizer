@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { PostalItem } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package } from 'lucide-react';
+import { Plus, Package, Edit2, X } from 'lucide-react';
 
 interface HomeScreenProps {
   items: PostalItem[];
@@ -15,7 +15,30 @@ interface HomeScreenProps {
   onItemClick: (itemId: string) => void;
 }
 
-const AVAILABLE_TAGS = ['仕事', '趣味', '旅行', '郵便物'];
+const COLOR_PALETTE = [
+  { name: '仕事', color: '#3B82F6' },
+  { name: '趣味', color: '#22C55E' },
+  { name: '旅行', color: '#A78BFA' },
+  { name: '赤', color: '#FF0000' },
+  { name: '青', color: '#0000FF' },
+  { name: '緑', color: '#008000' },
+  { name: '黄', color: '#FFFF00' },
+  { name: '紫', color: '#800080' },
+  { name: '橙', color: '#FFA500' },
+  { name: '茶', color: '#A52A2A' },
+  { name: 'ピンク', color: '#FFC0CB' },
+  { name: 'シアン', color: '#00FFFF' },
+  { name: 'マゼンタ', color: '#FF00FF' },
+  { name: 'ライム', color: '#00FF00' },
+  { name: 'ネイビー', color: '#000080' },
+  { name: 'オリーブ', color: '#808000' },
+  { name: 'テール', color: '#008080' },
+  { name: 'マルーン', color: '#800000' },
+  { name: 'グレー', color: '#808080' },
+  { name: '白', color: '#FFFFFF' },
+];
+
+const DEFAULT_TAGS = COLOR_PALETTE.slice(0, 3);
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   items,
@@ -26,11 +49,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onAddItem,
   onItemClick
 }) => {
+  // タグ管理（localStorage永続化）
+  const [tags, setTags] = useState(() => {
+    const saved = localStorage.getItem('postal_tags');
+    return saved ? JSON.parse(saved) : COLOR_PALETTE.slice(0, 3);
+  });
+  useEffect(() => {
+    localStorage.setItem('postal_tags', JSON.stringify(tags));
+  }, [tags]);
+
+  // 新規タグ追加用state
+  const [showAddTag, setShowAddTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#64748b');
+
+  // 日付範囲検索用state
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // 編集用state
+  const [editTagIdx, setEditTagIdx] = useState<number|null>(null);
+  const [editTagName, setEditTagName] = useState('');
+  const [editTagColor, setEditTagColor] = useState('#64748b');
+
   const { filteredItems, tagCounts } = useMemo(() => {
     // Calculate tag counts
     const counts: Record<string, number> = {};
-    AVAILABLE_TAGS.forEach(tag => {
-      counts[tag] = items.filter(item => item.tags.includes(tag)).length;
+    tags.forEach(tag => {
+      counts[tag.name] = items.filter(item => item.tags.includes(tag.name)).length;
     });
 
     // Filter items
@@ -51,8 +97,57 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       );
     }
 
+    // 日付範囲フィルタ
+    if (startDate) {
+      const start = new Date(startDate);
+      filtered = filtered.filter(item => new Date(item.createdAt) >= start);
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      // 終了日の23:59:59まで含める
+      end.setHours(23,59,59,999);
+      filtered = filtered.filter(item => new Date(item.createdAt) <= end);
+    }
+
     return { filteredItems: filtered, tagCounts: counts };
-  }, [items, searchQuery, selectedTags]);
+  }, [items, searchQuery, selectedTags, startDate, endDate, tags]);
+
+  // タグ追加処理
+  const handleAddTag = () => {
+    if (!newTagName.trim() || tags.some(t => t.name === newTagName.trim())) return;
+    setTags([...tags, { name: newTagName.trim(), color: newTagColor }]);
+    setNewTagName('');
+    setNewTagColor('#64748b');
+    setShowAddTag(false);
+  };
+
+  // 編集開始
+  const openEditTagModal = (idx: number) => {
+    setEditTagIdx(idx);
+    setEditTagName(tags[idx].name);
+    setEditTagColor(tags[idx].color);
+    setShowAddTag(false);
+  };
+  // 編集保存
+  const handleEditTag = () => {
+    if (editTagIdx === null || !editTagName.trim()) return;
+    setTags(tags.map((t, i) => i === editTagIdx ? { name: editTagName.trim(), color: editTagColor } : t));
+    setEditTagIdx(null);
+    setEditTagName('');
+    setEditTagColor('#64748b');
+  };
+  // 編集キャンセル
+  const handleCancelEdit = () => {
+    setEditTagIdx(null);
+    setEditTagName('');
+    setEditTagColor('#64748b');
+  };
+  // タグ削除
+  const handleRemoveTag = (idx: number) => {
+    if (window.confirm('このタグを削除しますか？')) {
+      setTags(tags.filter((_, i) => i !== idx));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -60,30 +155,178 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
           <h1 className="text-xl font-bold text-gray-900 mb-4">
-            Postal Snap Organizer
+            Snap Organizer
           </h1>
           <SearchBar
             value={searchQuery}
             onChange={onSearchChange}
             placeholder="テキストやタグで検索..."
           />
+          {/* 日付範囲検索UI */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-gray-600">期間検索:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+              placeholder="開始日"
+            />
+            <span className="text-gray-500">～</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+              placeholder="終了日"
+            />
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="p-1 text-red-500 hover:text-red-700"
+                title="期間検索をリセット"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {/* タグなし検索チェックボックス */}
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              type="checkbox"
+              id="no-tags-search"
+              checked={selectedTags.length === 0}
+              onChange={() => onTagToggle('')}
+              className="rounded"
+            />
+            <label htmlFor="no-tags-search" className="text-sm text-gray-600">
+              タグなしのアイテムも検索
+            </label>
+          </div>
         </div>
       </div>
 
       {/* Tags Filter */}
       <div className="max-w-md mx-auto px-4 py-4">
-        <div className="flex flex-wrap gap-2">
-          {AVAILABLE_TAGS.map(tag => (
-            <TagChip
-              key={tag}
-              tag={tag}
-              count={tagCounts[tag]}
-              selected={selectedTags.includes(tag)}
-              onClick={() => onTagToggle(tag)}
-            />
+        <div className="flex flex-wrap gap-2 items-center">
+          {tags.map((tag, idx) => (
+            <span key={tag.name} className="flex items-center gap-1">
+              <TagChip
+                tag={tag.name}
+                count={tagCounts[tag.name]}
+                selected={selectedTags.includes(tag.name)}
+                onClick={() => onTagToggle(tag.name)}
+                style={{ backgroundColor: tag.color + '22', color: tag.color }}
+              />
+              <button
+                className="ml-1 p-1 rounded hover:bg-gray-200"
+                onClick={() => openEditTagModal(idx)}
+                title="編集"
+              >
+                <Edit2 className="w-3 h-3 text-gray-500" />
+              </button>
+              <button
+                className="ml-1 p-1 rounded hover:bg-red-100"
+                onClick={() => handleRemoveTag(idx)}
+                title="削除"
+              >
+                <X className="w-3 h-3 text-red-500" />
+              </button>
+            </span>
           ))}
+          <button
+            className="px-2 py-1 bg-gray-200 rounded text-sm"
+            onClick={() => setShowAddTag(true)}
+          >＋新規タグ</button>
         </div>
       </div>
+
+      {/* 新規タグ追加モーダル */}
+      {showAddTag && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-md w-80">
+            <h2 className="font-bold mb-2">新しいタグを追加</h2>
+            <input
+              className="border rounded px-2 py-1 w-full mb-2"
+              placeholder="タグ名"
+              value={newTagName}
+              onChange={e => setNewTagName(e.target.value)}
+              maxLength={12}
+            />
+            <div className="mb-4">
+              <span className="block mb-1">色見本(パレットから自由設定も可能):</span>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {COLOR_PALETTE.map(p => (
+                  <button
+                    key={p.color}
+                    type="button"
+                    className="w-6 h-6 rounded-full border-2 focus:outline-none"
+                    style={{
+                      background: p.color,
+                      borderColor: newTagColor === p.color ? '#000' : '#fff',
+                    }}
+                    onClick={() => setNewTagColor(p.color)}
+                    aria-label={p.name}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={newTagColor}
+                  onChange={e => setNewTagColor(e.target.value)}
+                  className="ml-2 w-8 h-8 p-0 border-none bg-transparent align-middle"
+                  title="カスタム色"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-3 py-1 bg-gray-200 rounded"
+                onClick={() => setShowAddTag(false)}
+              >キャンセル</button>
+              <button
+                className="px-3 py-1 bg-blue-500 text-white rounded"
+                onClick={handleAddTag}
+                disabled={!newTagName.trim() || tags.some(t => t.name === newTagName.trim())}
+              >追加</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* タグ編集モーダル */}
+      {editTagIdx !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-md w-80">
+            <h2 className="font-bold mb-2">タグを編集</h2>
+            <input
+              className="border rounded px-2 py-1 w-full mb-2"
+              placeholder="タグ名"
+              value={editTagName}
+              onChange={e => setEditTagName(e.target.value)}
+              maxLength={12}
+            />
+            <div className="flex items-center gap-2 mb-4">
+              <span>色:</span>
+              <input
+                type="color"
+                value={editTagColor}
+                onChange={e => setEditTagColor(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-3 py-1 bg-gray-200 rounded"
+                onClick={handleCancelEdit}
+              >キャンセル</button>
+              <button
+                className="px-3 py-1 bg-blue-500 text-white rounded"
+                onClick={handleEditTag}
+                disabled={!editTagName.trim()}
+              >保存</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Items List */}
       <div className="max-w-md mx-auto px-4 pb-20">
@@ -116,6 +359,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         className="fixed bottom-6 right-6 bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 active:scale-95"
       >
         <Plus className="h-6 w-6" />
+      </button>
+
+      <button
+        onClick={() => {
+          localStorage.removeItem('postal_tags');
+          window.location.reload();
+        }}
+        className="px-3 py-1 bg-red-500 text-white rounded"
+      >
+        タグを初期状態に戻す
       </button>
     </div>
   );

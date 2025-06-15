@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PostalItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff } from 'lucide-react';
 
 interface DetailScreenProps {
   item: PostalItem;
@@ -22,6 +22,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   const [editedOcrText, setEditedOcrText] = useState(item.ocrText);
   const [editedMemo, setEditedMemo] = useState(item.memo);
   const [editedTags, setEditedTags] = useState<string[]>(item.tags);
+  const [isListening, setIsListening] = useState(false);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('ja-JP', {
@@ -62,6 +63,30 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     if (window.confirm('このアイテムを削除しますか？')) {
       onDelete();
     }
+  };
+
+  // 音声入力
+  const handleVoiceInput = () => {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert('このブラウザは音声認識に対応していません');
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setEditedMemo((prev: string) => prev ? prev + '\n' + transcript : transcript);
+    };
+
+    recognition.start();
   };
 
   return (
@@ -118,11 +143,12 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
 
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         {/* Image */}
-        <div className="bg-white rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-white rounded-xl overflow-hidden shadow-sm flex justify-center items-center" style={{ minHeight: 180, maxHeight: 320 }}>
           <img
             src={item.image}
             alt="撮影画像"
-            className="w-full aspect-[4/3] object-cover"
+            className="object-contain"
+            style={{ maxWidth: '100%', maxHeight: '320px', width: 'auto', height: 'auto' }}
           />
         </div>
 
@@ -191,12 +217,22 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
             <span className="font-medium">メモ</span>
           </div>
           {isEditing ? (
-            <textarea
-              value={editedMemo}
-              onChange={(e) => setEditedMemo(e.target.value)}
-              className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="メモを入力..."
-            />
+            <div className="flex items-center gap-2">
+              <textarea
+                value={editedMemo}
+                onChange={(e) => setEditedMemo(e.target.value)}
+                className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="メモを入力..."
+              />
+              <button
+                type="button"
+                className={`p-2 rounded-full ${isListening ? 'bg-blue-100' : 'bg-gray-100'} ml-2`}
+                onClick={handleVoiceInput}
+                title="音声入力"
+              >
+                {isListening ? <MicOff className="w-5 h-5 text-blue-500" /> : <Mic className="w-5 h-5 text-gray-500" />}
+              </button>
+            </div>
           ) : (
             <div className="text-gray-900">
               {item.memo || (
