@@ -1,0 +1,15 @@
+{
+  "name": "your-wasm-pkg",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "your_wasm_pkg_bg.wasm",
+    "your_wasm_pkg.js",
+    "your_wasm_pkg.d.ts"
+  ],
+  "main": "your_wasm_pkg.js",
+  "types": "your_wasm_pkg.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
