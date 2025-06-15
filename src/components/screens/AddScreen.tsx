@@ -8,6 +8,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { rustResizeImage } from '../../utils/rustImageResize';
 import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
+import EXIF from 'exif-js'; // exif-jsを使う場合
 
 interface AddScreenProps {
   onSave: (data: {
@@ -45,6 +46,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   });
   const [isListening, setIsListening] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
+  const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
     init().then(() => setWasmReady(true)).catch(console.error);
@@ -83,9 +85,22 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      processImage(file);
+      // EXIF読み取り
+      EXIF.getData(file, function() {
+        const orientation = EXIF.getTag(this, 'Orientation');
+        imageToDataURLWithOrientation(file, orientation).then(imageDataURL => {
+          setImage(imageDataURL); // 表示・保存用
+          // OCR用前処理はここで実施
+        });
+      });
     }
   };
+
+  // orientationに応じてcanvasで回転補正
+  async function imageToDataURLWithOrientation(file, orientation) {
+    // File→Image→Canvas→DataURLの流れで回転補正
+    // ...実装例は省略（必要なら詳細コード出します）
+  }
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags(prev =>
@@ -365,12 +380,11 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
                 </>
               ) : (
                 <div className="flex justify-center items-center bg-gray-100 rounded-lg" style={{ minHeight: 180, maxHeight: 300 }}>
-                  <img
-                    src={image}
-                    alt="撮影画像"
-                    className="object-contain"
-                    style={{ maxWidth: '100%', maxHeight: '300px', width: 'auto', height: 'auto' }}
-                  />
+                  <div>
+                    <img src={image} alt="撮影画像" style={{ transform: `rotate(${rotation}deg)` }} />
+                    <button onClick={() => setRotation(rotation + 90)}>↻ 右回転</button>
+                    <button onClick={() => setRotation(rotation - 90)}>↺ 左回転</button>
+                  </div>
                 </div>
               )}
               <button
