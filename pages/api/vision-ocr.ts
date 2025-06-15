@@ -22,4 +22,5 @@ export default async function handler(req: any, res: any) {
   const data = await response.json();
   const text = data.responses?.[0]?.fullTextAnnotation?.text || '';
   res.status(200).json({ text });
+  console.log(text);
 }
