@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "your-wasm-pkg"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -12,7 +12,7 @@ rust-version = "1.77.2"
 
 [lib]
 name = "app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.2.0", features = [] }
@@ -25,3 +25,4 @@ tauri = { version = "2.5.0", features = [] }
 tauri-plugin-log = "2.0.0-rc"
 image = "0.24.9"
 base64 = "0.21.7"
+wasm-bindgen = "0.2"

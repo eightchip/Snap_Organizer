@@ -7,6 +7,7 @@ import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { rustResizeImage } from '../../utils/rustImageResize';
+import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
 
 interface AddScreenProps {
   onSave: (data: {
@@ -43,6 +44,11 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     ];
   });
   const [isListening, setIsListening] = useState(false);
+  const [wasmReady, setWasmReady] = useState(false);
+
+  useEffect(() => {
+    init().then(() => setWasmReady(true)).catch(console.error);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('postal_tags');
@@ -50,26 +56,25 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   }, []);
 
   const processImage = async (file: File) => {
+    if (!wasmReady) {
+      alert('WASMの初期化中です。少し待ってから再度お試しください。');
+      return;
+    }
     setIsProcessing(true);
     try {
       const imageDataURL = await imageToDataURL(file);
-      // base64部分だけ抽出
       const base64 = imageDataURL.split(',')[1];
-      // Rustでリサイズ（例: 幅600px, 高さ自動 or 固定値）
-      try {
-        const resizedBase64 = await rustResizeImage(base64, 600, 800);
-        setImage('data:image/png;base64,' + resizedBase64);
-      } catch (resizeError) {
-        console.error('画像リサイズエラー:', resizeError);
-        // リサイズに失敗した場合は元の画像を使用
-        setImage(imageDataURL);
-      }
+      const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      // WASMで前処理（Promise対応）
+      const processed = await preprocess_image(imageBuffer);
+      const processedBase64 = uint8ToBase64(processed);
+      setImage('data:image/png;base64,' + processedBase64);
       setOcrText('');
       setCropResults([]);
       setCrops([{ unit: '%', width: 50, height: 30, x: 25, y: 35 }]);
     } catch (error) {
       console.error('画像処理エラー:', error);
-      alert('画像の処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)));
+      alert('画像の処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
     }
@@ -218,6 +223,21 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
     recognition.start();
   };
+
+  // Uint8Array → base64 変換は以下のように分割して行う
+  function uint8ToBase64(u8arr) {
+    let CHUNK_SIZE = 0x8000; // 32KB
+    let index = 0;
+    let length = u8arr.length;
+    let result = '';
+    let slice;
+    while (index < length) {
+      slice = u8arr.subarray(index, Math.min(index + CHUNK_SIZE, length));
+      result += String.fromCharCode.apply(null, slice);
+      index += CHUNK_SIZE;
+    }
+    return btoa(result);
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
