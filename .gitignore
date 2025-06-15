@@ -3,6 +3,7 @@
 /target/
 /gen/schemas
 .env
+.env.*
 
 # Rust build artifacts
 your-wasm-pkg/target/
