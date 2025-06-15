@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: any, res: any) {
   const { imageBase64 } = req.body;
   const apiKey = process.env.GOOGLE_CLOUD_VISION_API_KEY;
 

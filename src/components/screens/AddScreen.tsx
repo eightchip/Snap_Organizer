@@ -152,11 +152,15 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     try {
       let extractedText = '';
       if (useCloudOcr) {
-        alert('Google Cloud Vision OCRは未実装です');
-        setIsProcessing(false);
-        return;
-      }
-      if (ocrMode === 'full') {
+        const res = await fetch('/api/vision-ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: image.split(',')[1] }),
+        });
+        const { text } = await res.json();
+        extractedText = text;
+        setOcrText(normalizeOcrText(extractedText));
+      } else if (ocrMode === 'full') {
         extractedText = await runTesseractOcr(dataURLtoFile(image, 'image.jpg'));
         setOcrText(normalizeOcrText(extractedText));
       } else if (ocrMode === 'crop') {
