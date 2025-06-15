@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { PostalItem } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
