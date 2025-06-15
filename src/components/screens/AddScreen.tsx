@@ -6,6 +6,7 @@ import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
+import { rustResizeImage } from '../../utils/rustImageResize';
 
 interface AddScreenProps {
   onSave: (data: {
@@ -52,13 +53,23 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     setIsProcessing(true);
     try {
       const imageDataURL = await imageToDataURL(file);
-      setImage(imageDataURL);
+      // base64部分だけ抽出
+      const base64 = imageDataURL.split(',')[1];
+      // Rustでリサイズ（例: 幅600px, 高さ自動 or 固定値）
+      try {
+        const resizedBase64 = await rustResizeImage(base64, 600, 800);
+        setImage('data:image/png;base64,' + resizedBase64);
+      } catch (resizeError) {
+        console.error('画像リサイズエラー:', resizeError);
+        // リサイズに失敗した場合は元の画像を使用
+        setImage(imageDataURL);
+      }
       setOcrText('');
       setCropResults([]);
       setCrops([{ unit: '%', width: 50, height: 30, x: 25, y: 35 }]);
     } catch (error) {
       console.error('画像処理エラー:', error);
-      alert('画像の処理中にエラーが発生しました');
+      alert('画像の処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsProcessing(false);
     }
@@ -118,7 +129,11 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       canvas.width,
       canvas.height
     );
-    return canvas.toDataURL('image/jpeg');
+    // Rustでリサイズ（例: 幅600px, 高さ自動 or 固定値）
+    const croppedDataUrl = canvas.toDataURL('image/jpeg');
+    const base64 = croppedDataUrl.split(',')[1];
+    const resizedBase64 = await rustResizeImage(base64, 600, 800);
+    return 'data:image/png;base64,' + resizedBase64;
   };
 
   // OCR実行
