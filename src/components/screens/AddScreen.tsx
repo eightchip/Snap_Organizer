@@ -120,7 +120,6 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const getCroppedImage = async (crop: Crop): Promise<string | null> => {
     if (!imgRef.current || !crop.width || !crop.height) return null;
     const image = imgRef.current;
-    // 画像がまだロードされていない場合は待つ
     if (!image.complete || image.naturalWidth === 0) return null;
 
     const canvas = document.createElement('canvas');
@@ -141,16 +140,10 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       canvas.width,
       canvas.height
     );
-    // Rustでリサイズ（例: 幅600px, 高さ自動 or 固定値）
-    const croppedDataUrl = canvas.toDataURL('image/jpeg');
-    const base64 = croppedDataUrl.split(',')[1];
-    try {
-      const resizedBase64 = await rustResizeImage(base64, 600, 800);
-      return 'data:image/png;base64,' + resizedBase64;
-    } catch (e) {
-      console.error('rustResizeImage error:', e);
-      return null;
-    }
+    // Webではcanvasでリサイズ
+    const croppedDataUrl = canvas.toDataURL('image/png');
+    const resizedDataUrl = await resizeImageDataUrl(croppedDataUrl, 600, 800);
+    return resizedDataUrl;
   };
 
   // OCR実行
@@ -249,6 +242,25 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       index += CHUNK_SIZE;
     }
     return btoa(result);
+  }
+
+  function resizeImageDataUrl(dataUrl: string, maxWidth: number, maxHeight: number): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = function() {
+        let { width, height } = img;
+        const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = dataUrl;
+    });
   }
 
   return (
