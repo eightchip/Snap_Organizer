@@ -8,7 +8,6 @@ import 'react-image-crop/dist/ReactCrop.css';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { rustResizeImage } from '../../utils/rustImageResize';
 import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
-import EXIF from 'exif-js'; // exif-jsを使う場合
 
 interface AddScreenProps {
   onSave: (data: {
@@ -84,73 +83,13 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-
-    // 1. EXIF取得用
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const result = e.target?.result;
-      // ★型チェックを厳密に
-      if (result && typeof result === "object" && result instanceof ArrayBuffer) {
-        const view = new DataView(result);
-        const orientation = EXIF.readFromBinaryFile(view)?.Orientation || 1;
-        proceedWithImage(file, orientation);
-      } else {
-        // 失敗時はorientation=1で続行
-        proceedWithImage(file, 1);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  function proceedWithImage(file: File, orientation: number) {
-    const reader2 = new FileReader();
-    reader2.onload = function(e2) {
-      const imageDataURL = e2.target?.result as string;
-      imageToDataURLWithOrientation(imageDataURL, orientation).then(rotatedDataURL => {
-        setImage(rotatedDataURL); // 表示・保存用
+    if (file) {
+      imageToDataURL(file).then(imageDataURL => {
+        setImage(imageDataURL); // 表示・保存用
         // OCR用前処理はここで実施
       });
-    };
-    reader2.readAsDataURL(file);
-  }
-
-  // orientationに応じてcanvasで回転補正
-  async function imageToDataURLWithOrientation(dataURL: string, orientation: number): Promise<string> {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      img.onload = function() {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        // 回転補正
-        if (orientation > 4) {
-          canvas.width = img.height;
-          canvas.height = img.width;
-        } else {
-          canvas.width = img.width;
-          canvas.height = img.height;
-        }
-        switch (orientation) {
-          case 3:
-            ctx.rotate(Math.PI);
-            ctx.drawImage(img, -img.width, -img.height);
-            break;
-          case 6:
-            ctx.rotate(0.5 * Math.PI);
-            ctx.drawImage(img, 0, -img.height);
-            break;
-          case 8:
-            ctx.rotate(-0.5 * Math.PI);
-            ctx.drawImage(img, -img.width, 0);
-            break;
-          default:
-            ctx.drawImage(img, 0, 0);
-        }
-        resolve(canvas.toDataURL('image/jpeg'));
-      };
-      img.src = dataURL;
-    });
-  }
+    }
+  };
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags(prev =>
