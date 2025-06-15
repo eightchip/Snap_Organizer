@@ -84,28 +84,34 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const arrayBuffer = e.target?.result;
-        if (!arrayBuffer) return;
-        // EXIFからorientation取得
-        const view = new DataView(arrayBuffer as ArrayBuffer);
-        const orientation = EXIF.readFromBinaryFile(view)?.Orientation || 1;
-        imageToDataURLWithOrientation(file, orientation).then(imageDataURL => {
-          setImage(imageDataURL); // 表示・保存用
+    if (!file) return;
+
+    // 1. EXIF取得用
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const arrayBuffer = e.target?.result;
+      if (!arrayBuffer || !(arrayBuffer instanceof ArrayBuffer)) return;
+      const view = new DataView(arrayBuffer);
+      const orientation = EXIF.readFromBinaryFile(view)?.Orientation || 1;
+
+      // 2. DataURL生成用
+      const reader2 = new FileReader();
+      reader2.onload = function(e2) {
+        const imageDataURL = e2.target?.result as string;
+        imageToDataURLWithOrientation(imageDataURL, orientation).then(rotatedDataURL => {
+          setImage(rotatedDataURL); // 表示・保存用
           // OCR用前処理はここで実施
         });
       };
-      reader.readAsArrayBuffer(file);
-    }
+      reader2.readAsDataURL(file);
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   // orientationに応じてcanvasで回転補正
-  async function imageToDataURLWithOrientation(file: File, orientation: number): Promise<string> {
+  async function imageToDataURLWithOrientation(dataURL: string, orientation: number): Promise<string> {
     return new Promise((resolve) => {
       const img = new window.Image();
-      const url = URL.createObjectURL(file);
       img.onload = function() {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
@@ -134,9 +140,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
             ctx.drawImage(img, 0, 0);
         }
         resolve(canvas.toDataURL('image/jpeg'));
-        URL.revokeObjectURL(url);
       };
-      img.src = url;
+      img.src = dataURL;
     });
   }
 
