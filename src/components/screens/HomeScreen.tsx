@@ -5,6 +5,8 @@ import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
 import { Plus, Package, Edit2, X } from 'lucide-react';
+import { usePostalItems } from '../../hooks/usePostalItems';
+import QRcode from 'qrcode.react';
 
 interface HomeScreenProps {
   items: PostalItem[];
@@ -14,6 +16,7 @@ interface HomeScreenProps {
   onTagToggle: (tag: string) => void;
   onAddItem: () => void;
   onItemClick: (itemId: string) => void;
+  onBulkTagRename: (oldName: string, newName: string) => void;
 }
 
 const COLOR_PALETTE = [
@@ -48,7 +51,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSearchChange,
   onTagToggle,
   onAddItem,
-  onItemClick
+  onItemClick,
+  onBulkTagRename
 }) => {
   // タグ管理（localStorage永続化）
   const [tags, setTags] = useState(() => {
@@ -62,7 +66,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // 新規タグ追加用state
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#64748b');
+  const [newTagColor, setNewTagColor] = useState(COLOR_PALETTE[0].color);
+  const [addTagError, setAddTagError] = useState('');
 
   // 日付範囲検索用state
   const [startDate, setStartDate] = useState('');
@@ -71,7 +76,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // 編集用state
   const [editTagIdx, setEditTagIdx] = useState<number|null>(null);
   const [editTagName, setEditTagName] = useState('');
-  const [editTagColor, setEditTagColor] = useState('#64748b');
+  const [editTagColor, setEditTagColor] = useState(COLOR_PALETTE[0].color);
+  const [editTagError, setEditTagError] = useState('');
+  const [editTagBulk, setEditTagBulk] = useState(false);
 
   const { filteredItems, tagCounts } = useMemo(() => {
     // Calculate tag counts
@@ -115,10 +122,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // タグ追加処理
   const handleAddTag = () => {
+    setAddTagError('');
     if (!newTagName.trim() || tags.some(t => t.name === newTagName.trim())) return;
+    if (!newTagColor || newTagColor === COLOR_PALETTE[0].color) {
+      setAddTagError('色を選択してください');
+      return;
+    }
     setTags([...tags, { name: newTagName.trim(), color: newTagColor }]);
     setNewTagName('');
-    setNewTagColor('#64748b');
+    setNewTagColor(COLOR_PALETTE[0].color);
     setShowAddTag(false);
   };
 
@@ -131,17 +143,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
   // 編集保存
   const handleEditTag = () => {
+    setEditTagError('');
     if (editTagIdx === null || !editTagName.trim()) return;
-    setTags(tags.map((t, i) => i === editTagIdx ? { name: editTagName.trim(), color: editTagColor } : t));
+    if (!editTagColor || editTagColor === COLOR_PALETTE[0].color) {
+      setEditTagError('色を選択してください');
+      return;
+    }
+    const oldName = tags[editTagIdx].name;
+    const newName = editTagName.trim();
+    setTags(tags.map((t, i) => i === editTagIdx ? { name: newName, color: editTagColor } : t));
+    if (editTagBulk && oldName !== newName) {
+      onBulkTagRename(oldName, newName);
+    }
     setEditTagIdx(null);
     setEditTagName('');
-    setEditTagColor('#64748b');
+    setEditTagColor(COLOR_PALETTE[0].color);
+    setEditTagBulk(false);
   };
   // 編集キャンセル
   const handleCancelEdit = () => {
     setEditTagIdx(null);
     setEditTagName('');
-    setEditTagColor('#64748b');
+    setEditTagColor(COLOR_PALETTE[0].color);
   };
   // タグ削除
   const handleRemoveTag = (idx: number) => {
@@ -152,6 +175,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* QRコード（テスト用: http://192.168.3.139:5173/ ） */}
+      <div style={{ position: 'absolute', left: 8, top: 8, width: 40, height: 60, display: 'flex', alignItems: 'center' }}>
+        <QRcode
+          value="https://snap-organizer.vercel.app/"
+          size={40}
+          style={{ height: 60, width: 40, objectFit: 'contain' }}
+        />
+      </div>
+
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
@@ -279,6 +311,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 />
               </div>
             </div>
+            {addTagError && <div className="text-red-500 text-xs mb-2">{addTagError}</div>}
             <div className="flex gap-2 justify-end">
               <button
                 className="px-3 py-1 bg-gray-200 rounded"
@@ -314,6 +347,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 onChange={e => setEditTagColor(e.target.value)}
               />
             </div>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" id="editTagBulk" checked={editTagBulk} onChange={e => setEditTagBulk(e.target.checked)} />
+              <label htmlFor="editTagBulk" className="text-sm">既存データのタグ名も一括変更</label>
+            </div>
+            {editTagError && <div className="text-red-500 text-xs mb-2">{editTagError}</div>}
             <div className="flex gap-2 justify-end">
               <button
                 className="px-3 py-1 bg-gray-200 rounded"

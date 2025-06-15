@@ -48,6 +48,7 @@ export const usePostalItems = () => {
     addItem,
     updateItem,
     deleteItem,
-    getItem
+    getItem,
+    setItems,
   };
 };

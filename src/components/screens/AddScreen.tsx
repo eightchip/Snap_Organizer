@@ -16,7 +16,7 @@ interface AddScreenProps {
   onBack: () => void;
 }
 
-const AVAILABLE_TAGS = ['仕事', '趣味', '旅行', '郵便物'];
+const AVAILABLE_TAGS = ['仕事', '趣味', '旅行'];
 
 export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const [image, setImage] = useState<string>('');

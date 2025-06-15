@@ -11,7 +11,13 @@ interface DetailScreenProps {
   onDelete: () => void;
 }
 
-const AVAILABLE_TAGS = ['仕事', '趣味', '旅行', '郵便物'];
+const AVAILABLE_TAGS = ['仕事', '趣味', '旅行'];
+
+const getTagColor = (tagName: string) => {
+  const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
+  const found = tags.find((t: any) => t.name === tagName);
+  return found ? found.color : '#ccc';
+};
 
 export const DetailScreen: React.FC<DetailScreenProps> = ({
   item,
@@ -197,12 +203,13 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
                   tag={tag}
                   selected={editedTags.includes(tag)}
                   onClick={() => handleTagToggle(tag)}
+                  style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }}
                 />
               ))
             ) : (
               item.tags.length > 0 ? (
                 item.tags.map(tag => (
-                  <TagChip key={tag} tag={tag} />
+                  <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }} />
                 ))
               ) : (
                 <p className="text-gray-500">タグが設定されていません</p>
@@ -219,12 +226,12 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
           </div>
           {isEditing ? (
             <div className="flex items-center gap-2">
-              <textarea
-                value={editedMemo}
-                onChange={(e) => setEditedMemo(e.target.value)}
-                className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="メモを入力..."
-              />
+            <textarea
+              value={editedMemo}
+              onChange={(e) => setEditedMemo(e.target.value)}
+              className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="メモを入力..."
+            />
               <button
                 type="button"
                 className={`p-2 rounded-full ${isListening ? 'bg-blue-100' : 'bg-gray-100'} ml-2`}

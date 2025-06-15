@@ -24,6 +24,12 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
     return text.slice(0, maxLength) + '...';
   };
 
+  const getTagColor = (tagName: string) => {
+    const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
+    const found = tags.find((t: any) => t.name === tagName);
+    return found ? found.color : '#ccc';
+  };
+
   return (
     <div
       onClick={onClick}
@@ -60,7 +66,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
         {item.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {item.tags.map((tag) => (
-              <TagChip key={tag} tag={tag} />
+              <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }} />
             ))}
           </div>
         )}

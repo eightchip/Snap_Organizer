@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Screen, AppState } from './types';
 import { usePostalItems } from './hooks/usePostalItems';
 import { HomeScreen } from './components/screens/HomeScreen';
@@ -6,13 +6,68 @@ import { AddScreen } from './components/screens/AddScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
 
 function App() {
-  const { items, addItem, updateItem, deleteItem, getItem } = usePostalItems();
+  const { items, addItem, updateItem, deleteItem, getItem, setItems } = usePostalItems();
   const [appState, setAppState] = useState<AppState>({
     currentScreen: 'home',
     selectedItemId: null,
     searchQuery: '',
     selectedTags: []
   });
+
+  // --- エクスポート・インポート機能 ---
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // タグ情報もlocalStorageから取得
+  const getTags = () => {
+    const saved = localStorage.getItem('postal_tags');
+    return saved ? JSON.parse(saved) : [];
+  };
+  const setTags = (tags: any) => {
+    localStorage.setItem('postal_tags', JSON.stringify(tags));
+  };
+
+  // エクスポート
+  const handleExport = () => {
+    const data = {
+      items,
+      tags: getTags(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'snap_organizer_backup.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // インポート
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (json.items && Array.isArray(json.items)) {
+          // 日付をDate型に変換
+          const fixedItems = json.items.map((item: any) => ({
+            ...item,
+            createdAt: new Date(item.createdAt),
+            updatedAt: new Date(item.updatedAt),
+          }));
+          setItems(fixedItems);
+        }
+        if (json.tags && Array.isArray(json.tags)) {
+          setTags(json.tags);
+        }
+        alert('データをインポートしました。画面をリロードしてください。');
+      } catch (err) {
+        alert('インポートに失敗しました: ' + err);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const navigateTo = (screen: Screen, itemId?: string) => {
     setAppState(prev => ({
@@ -54,10 +109,24 @@ function App() {
     navigateTo('home');
   };
 
+  const handleBulkTagRename = (oldName: string, newName: string) => {
+    const updatedItems = items.map(item => ({
+      ...item,
+      tags: item.tags.map(tag => tag === oldName ? newName : tag)
+    }));
+    setItems(updatedItems);
+  };
+
   const renderScreen = () => {
     switch (appState.currentScreen) {
       case 'home':
         return (
+          <>
+            <div style={{textAlign: 'center', margin: '16px 0'}}>
+              <button onClick={handleExport} className="px-3 py-1 bg-green-500 text-white rounded mr-2">エクスポート</button>
+              <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1 bg-blue-500 text-white rounded">インポート</button>
+              <input type="file" accept="application/json" ref={fileInputRef} onChange={handleImport} style={{ display: 'none' }} />
+            </div>
           <HomeScreen
             items={items}
             searchQuery={appState.searchQuery}
@@ -66,7 +135,9 @@ function App() {
             onTagToggle={handleTagToggle}
             onAddItem={() => navigateTo('add')}
             onItemClick={(itemId) => navigateTo('detail', itemId)}
+              onBulkTagRename={handleBulkTagRename}
           />
+          </>
         );
 
       case 'add':

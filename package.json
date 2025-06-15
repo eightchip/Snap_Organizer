@@ -8,10 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "postinstall": "chmod +x node_modules/.bin/vite"
+    "postinstall": "node -e \"try { require('fs').chmodSync('node_modules/.bin/vite', '755') } catch (e) { }\""
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
+    "qrcode.react": "^3.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-image-crop": "^11.0.10",
