@@ -89,14 +89,16 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     // 1. EXIF取得用
     const reader = new FileReader();
     reader.onload = function(e) {
-      const arrayBuffer = e.target?.result;
-      if (!arrayBuffer || !(arrayBuffer instanceof ArrayBuffer)) {
+      const result = e.target?.result;
+      // ★型チェックを厳密に
+      if (result && typeof result === "object" && result instanceof ArrayBuffer) {
+        const view = new DataView(result);
+        const orientation = EXIF.readFromBinaryFile(view)?.Orientation || 1;
+        proceedWithImage(file, orientation);
+      } else {
+        // 失敗時はorientation=1で続行
         proceedWithImage(file, 1);
-        return;
       }
-      const view = new DataView(arrayBuffer);
-      const orientation = EXIF.readFromBinaryFile(view)?.Orientation || 1;
-      proceedWithImage(file, orientation);
     };
     reader.readAsArrayBuffer(file);
   };
