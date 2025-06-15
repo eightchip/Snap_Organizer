@@ -5,6 +5,7 @@ import { TagChip } from '../TagChip';
 import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/ocr';
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { normalizeOcrText } from '../../utils/normalizeOcrText';
 
 interface AddScreenProps {
   onSave: (data: {
@@ -86,10 +87,11 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
 
     onSave({
       image,
-      ocrText,
+      ocrText: normalizeOcrText(ocrText),
       tags: selectedTags,
       memo
     });
+    alert('保存しました');
   };
 
   const canSave = image && ocrText.trim();
@@ -131,7 +133,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       }
       if (ocrMode === 'full') {
         extractedText = await runTesseractOcr(dataURLtoFile(image, 'image.jpg'));
-        setOcrText(extractedText);
+        setOcrText(normalizeOcrText(extractedText));
       } else if (ocrMode === 'crop') {
         const results: string[] = [];
         for (const crop of crops) {
@@ -144,7 +146,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
           }
         }
         setCropResults(results);
-        setOcrText(results.filter(Boolean).join('\n'));
+        setOcrText(normalizeOcrText(results.filter(Boolean).join('\n')));
       }
     } catch (error) {
       console.error('画像処理エラー:', error);

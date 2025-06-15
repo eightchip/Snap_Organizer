@@ -28,6 +28,10 @@ function App() {
 
   // エクスポート
   const handleExport = () => {
+    if (items.length === 0) {
+      alert('エクスポートできるデータがありません');
+      return;
+    }
     const data = {
       items,
       tags: getTags(),

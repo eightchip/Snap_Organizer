@@ -7,6 +7,7 @@ import { ItemCard } from '../ItemCard';
 import { Plus, Package, Edit2, X } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import QRcode from 'qrcode.react';
+import { normalizeOcrText } from '../../utils/normalizeOcrText';
 
 interface HomeScreenProps {
   items: PostalItem[];
@@ -90,12 +91,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     // Filter items
     let filtered = items;
 
+    const normalizedQuery = normalizeOcrText(searchQuery.toLowerCase());
+
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(item =>
-        item.ocrText.toLowerCase().includes(query) ||
-        item.memo.toLowerCase().includes(query) ||
-        item.tags.some(tag => tag.toLowerCase().includes(query))
+        normalizeOcrText(item.ocrText.toLowerCase()).includes(normalizedQuery) ||
+        normalizeOcrText(item.memo.toLowerCase()).includes(normalizedQuery) ||
+        item.tags.some(tag => normalizeOcrText(tag.toLowerCase()).includes(normalizedQuery))
       );
     }
 
