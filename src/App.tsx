@@ -37,12 +37,21 @@ function App() {
       tags: getTags(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'snap_organizer_backup.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    
+    // モバイルデバイスの場合の処理
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // モバイルデバイスでは新しいウィンドウで開く
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } else {
+      // PCでは通常のダウンロード
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'snap_organizer_backup.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   // インポート

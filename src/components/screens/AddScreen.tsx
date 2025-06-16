@@ -113,17 +113,22 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     try {
       // 画像をリサイズ（最大幅1000px、最大高さ1000px、画質80%）
       const resizedImage = await resizeImage(dataURLtoFile(image, 'image.jpg'), 1000, 1000);
-      onSave({
-        image: URL.createObjectURL(resizedImage),
-        ocrText: normalizeOcrText(ocrText),
-        tags: selectedTags,
-        memo
-      });
-      setShowSaved(true);
-      setTimeout(() => {
-        setShowSaved(false);
-        setIsSaving(false);
-      }, 2000);
+      // Base64形式で保存
+      const reader = new FileReader();
+      reader.onload = () => {
+        onSave({
+          image: reader.result as string,
+          ocrText: normalizeOcrText(ocrText),
+          tags: selectedTags,
+          memo
+        });
+        setShowSaved(true);
+        setTimeout(() => {
+          setShowSaved(false);
+          setIsSaving(false);
+        }, 2000);
+      };
+      reader.readAsDataURL(resizedImage);
     } catch (e: any) {
       setSaveError('保存に失敗しました。画像サイズが大きすぎる可能性があります。');
       setIsSaving(false);
