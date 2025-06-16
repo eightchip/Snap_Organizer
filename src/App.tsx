@@ -82,7 +82,32 @@ function App() {
           setItems(fixedItems);
         }
         if (json.tags && Array.isArray(json.tags)) {
-          setTags(json.tags);
+          // 現在のタグを取得
+          const currentTags = getTags();
+          const importedTags = json.tags;
+
+          // タグの重複チェック
+          const duplicateTags = importedTags.filter((importedTag: any) =>
+            currentTags.some((currentTag: any) => currentTag.name === importedTag.name)
+          );
+
+          if (duplicateTags.length > 0) {
+            // 重複がある場合は確認ダイアログを表示
+            const confirmMessage = `以下のタグが重複しています。\n${duplicateTags.map((t: any) => t.name).join(', ')}\n\nインポートしたタグで上書きしますか？`;
+            if (window.confirm(confirmMessage)) {
+              // 重複を除去して新しいタグを追加
+              const uniqueTags = importedTags.filter((importedTag: any) =>
+                !currentTags.some((currentTag: any) => currentTag.name === importedTag.name)
+              );
+              setTags([...currentTags, ...uniqueTags]);
+            } else {
+              // 現在のタグを維持
+              alert('現在のタグ設定を維持します。');
+            }
+          } else {
+            // 重複がない場合は単純に追加
+            setTags([...currentTags, ...importedTags]);
+          }
         }
         alert('データをインポートしました。画面をリロードしてください。');
       } catch (err) {
