@@ -1,4 +1,4 @@
-export const handler = async (req: any, res: any) => {
+const handler = async (req: any, res: any) => {
   try {
     // 1. リクエスト内容を確認
     console.log('Request body:', req.body);
@@ -48,3 +48,5 @@ export const handler = async (req: any, res: any) => {
     res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 }
+
+export default handler;
