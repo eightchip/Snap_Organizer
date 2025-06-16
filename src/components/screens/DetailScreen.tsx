@@ -1,5 +1,4 @@
-import React from 'react';
-import  { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PostalItem } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff } from 'lucide-react';
@@ -10,8 +9,6 @@ interface DetailScreenProps {
   onUpdate: (updates: Partial<PostalItem>) => void;
   onDelete: () => void;
 }
-
-const AVAILABLE_TAGS = ['仕事', '趣味', '旅行'];
 
 const getTagColor = (tagName: string) => {
   const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
@@ -30,6 +27,18 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   const [editedMemo, setEditedMemo] = useState(item.memo);
   const [editedTags, setEditedTags] = useState<string[]>(item.tags);
   const [isListening, setIsListening] = useState(false);
+  const [availableTags, setAvailableTags] = useState(() => {
+    const saved = localStorage.getItem('postal_tags');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // タグリストを更新
+  useEffect(() => {
+    const saved = localStorage.getItem('postal_tags');
+    if (saved) {
+      setAvailableTags(JSON.parse(saved));
+    }
+  }, [isEditing]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('ja-JP', {
@@ -197,19 +206,26 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
           <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
           <div className="flex flex-wrap gap-2">
             {isEditing ? (
-              AVAILABLE_TAGS.map(tag => (
+              availableTags.map(tag => (
                 <TagChip
-                  key={tag}
-                  tag={tag}
-                  selected={editedTags.includes(tag)}
-                  onClick={() => handleTagToggle(tag)}
-                  style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }}
+                  key={tag.name}
+                  tag={tag.name}
+                  selected={editedTags.includes(tag.name)}
+                  onClick={() => handleTagToggle(tag.name)}
+                  style={{ backgroundColor: tag.color + '22', color: tag.color }}
                 />
               ))
             ) : (
               item.tags.length > 0 ? (
                 item.tags.map(tag => (
-                  <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }} />
+                  <TagChip 
+                    key={tag} 
+                    tag={tag} 
+                    style={{ 
+                      backgroundColor: getTagColor(tag) + '22', 
+                      color: getTagColor(tag) 
+                    }} 
+                  />
                 ))
               ) : (
                 <p className="text-gray-500">タグが設定されていません</p>
