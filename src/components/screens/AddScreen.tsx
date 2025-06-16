@@ -268,7 +268,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen max-h-screen overflow-auto bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
@@ -311,7 +311,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
                   checked={useCloudOcr}
                   onChange={e => setUseCloudOcr(e.target.checked)}
                 />
-                Google Cloud Visionで認識する（β）
+                Google Cloud Visionで認識する（有料）
               </label>
             </div>
           )}
@@ -393,7 +393,13 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
               ) : (
                 <div className="flex justify-center items-center bg-gray-100 rounded-lg" style={{ minHeight: 180, maxHeight: 300 }}>
                   <div>
-                    <img src={image} alt="撮影画像" style={{ transform: `rotate(${rotation}deg)` }} className="max-img-preview" />
+                    <img
+                      ref={imgRef}
+                      src={image}
+                      alt="撮影画像"
+                      style={{ transform: `rotate(${rotation}deg)` }}
+                      className="max-w-full max-h-[60vh] object-contain mx-auto"
+                    />
                     <button onClick={() => setRotation(rotation + 90)}>↻ 右回転</button>
                     <button onClick={() => setRotation(rotation - 90)}>↺ 左回転</button>
                   </div>
