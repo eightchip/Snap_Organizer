@@ -317,7 +317,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
           )}
           {/* OCRモード切り替えボタン */}
           {image && (
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-2 sticky top-16 bg-white z-20 py-2">
               <button
                 className={`px-3 py-1 rounded ${ocrMode === 'full' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
                 onClick={() => setOcrMode('full')}
@@ -398,7 +398,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
                       src={image}
                       alt="撮影画像"
                       style={{ transform: `rotate(${rotation}deg)` }}
-                      className="max-w-full max-h-[60vh] object-contain mx-auto"
+                      className="max-w-full max-h-[40vh] object-contain mx-auto"
                     />
                     <button onClick={() => setRotation(rotation + 90)}>↻ 右回転</button>
                     <button onClick={() => setRotation(rotation - 90)}>↺ 左回転</button>
