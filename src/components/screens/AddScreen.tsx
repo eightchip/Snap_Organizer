@@ -188,9 +188,11 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         const { text } = await res.json();
         extractedText = text;
         setOcrText(normalizeOcrText(extractedText));
+        setSaveError(null);
       } else if (ocrMode === 'full') {
         extractedText = await runTesseractOcr(dataURLtoFile(image, 'image.jpg'));
         setOcrText(normalizeOcrText(extractedText));
+        setSaveError(null);
       } else if (ocrMode === 'crop') {
         const results: string[] = [];
         for (const crop of crops) {
@@ -204,6 +206,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         }
         setCropResults(results);
         setOcrText(normalizeOcrText(results.filter(Boolean).join('\n')));
+        setSaveError(null);
       }
     } catch (error: any) {
       setSaveError('画像の処理中にエラーが発生しました。\n' + (error?.message || ''));
