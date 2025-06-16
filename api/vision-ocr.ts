@@ -1,4 +1,4 @@
-export default async function handler(req: any, res: any) {
+export const handler = async (req: any, res: any) => {
   try {
     // 1. リクエスト内容を確認
     console.log('Request body:', req.body);
