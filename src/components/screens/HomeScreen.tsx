@@ -242,7 +242,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Tags Filter */}
-      <div className="max-w-md mx-auto px-4 py-4">
+      <div className="max-w-md mx-auto px-4 py-4 sticky top-16 z-10 bg-gray-50">
         <div className="flex flex-wrap gap-2 items-center">
           {tags.map((tag, idx) => (
             <span key={tag.name} className="flex items-center gap-1">

@@ -46,6 +46,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const [isListening, setIsListening] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [rotation, setRotation] = useState(0);
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     init().then(() => setWasmReady(true)).catch(console.error);
@@ -104,14 +105,14 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       alert('画像とOCRテキストが必要です');
       return;
     }
-
     onSave({
       image,
       ocrText: normalizeOcrText(ocrText),
       tags: selectedTags,
       memo
     });
-    alert('保存しました');
+    setShowSaved(true);
+    setTimeout(() => setShowSaved(false), 2000);
   };
 
   const canSave = image && ocrText.trim();
@@ -510,6 +511,12 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
           </div>
         </div>
       </div>
+
+      {showSaved && (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded shadow z-50">
+          保存しました
+        </div>
+      )}
     </div>
   );
 };
