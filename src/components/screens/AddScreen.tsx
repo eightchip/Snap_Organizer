@@ -47,6 +47,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const [wasmReady, setWasmReady] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [showSaved, setShowSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     init().then(() => setWasmReady(true)).catch(console.error);
@@ -105,14 +107,24 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       alert('画像とOCRテキストが必要です');
       return;
     }
-    onSave({
-      image,
-      ocrText: normalizeOcrText(ocrText),
-      tags: selectedTags,
-      memo
-    });
-    setShowSaved(true);
-    setTimeout(() => setShowSaved(false), 2000);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      onSave({
+        image,
+        ocrText: normalizeOcrText(ocrText),
+        tags: selectedTags,
+        memo
+      });
+      setShowSaved(true);
+      setTimeout(() => {
+        setShowSaved(false);
+        setIsSaving(false);
+      }, 2000);
+    } catch (e: any) {
+      setSaveError('保存に失敗しました。もう一度お試しください。');
+      setIsSaving(false);
+    }
   };
 
   const canSave = image && ocrText.trim();
@@ -150,6 +162,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   // OCR実行
   const handleOcr = async () => {
     setIsProcessing(true);
+    setSaveError(null);
     try {
       let extractedText = '';
       if (useCloudOcr) {
@@ -158,6 +171,16 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: image.split(',')[1] }),
         });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          let msg = 'Google Cloud Visionで画像処理に失敗しました。';
+          if (errData && errData.error) {
+            msg += `\n${errData.error}`;
+          }
+          setSaveError(msg);
+          setIsProcessing(false);
+          return;
+        }
         const { text } = await res.json();
         extractedText = text;
         setOcrText(normalizeOcrText(extractedText));
@@ -178,9 +201,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         setCropResults(results);
         setOcrText(normalizeOcrText(results.filter(Boolean).join('\n')));
       }
-    } catch (error) {
-      console.error('画像処理エラー:', error);
-      alert('画像の処理中にエラーが発生しました');
+    } catch (error: any) {
+      setSaveError('画像の処理中にエラーが発生しました。\n' + (error?.message || ''));
     } finally {
       setIsProcessing(false);
     }
@@ -285,12 +307,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
             </h1>
             <button
               onClick={handleSave}
-              disabled={!canSave}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                canSave
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
+              disabled={!canSave || isSaving}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${(!canSave || isSaving) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
             >
               <Check className="h-4 w-4" />
               保存
@@ -513,8 +531,13 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       </div>
 
       {showSaved && (
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded shadow z-50">
+        <div className="fixed top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-[9999] text-lg font-bold animate-bounce">
           保存しました
+        </div>
+      )}
+      {saveError && (
+        <div className="fixed top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-[9999] text-lg font-bold">
+          {saveError}
         </div>
       )}
     </div>
