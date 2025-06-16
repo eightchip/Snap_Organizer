@@ -40,9 +40,19 @@ function App() {
     
     // モバイルデバイスの場合の処理
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-      // モバイルデバイスでは新しいウィンドウで開く
+      // モバイルデバイスではダウンロードリンクを表示
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'snap_organizer_backup.json';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      // 少し待ってから要素を削除
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
     } else {
       // PCでは通常のダウンロード
       const url = URL.createObjectURL(blob);
