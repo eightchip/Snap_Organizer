@@ -110,6 +110,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     setIsSaving(true);
     setSaveError(null);
     try {
+      // 保存前にデータ内容をログ
+      console.log('保存データ:', { image, ocrText, tags: selectedTags, memo });
       onSave({
         image,
         ocrText: normalizeOcrText(ocrText),
@@ -122,8 +124,10 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         setIsSaving(false);
       }, 2000);
     } catch (e: any) {
-      setSaveError('保存に失敗しました。もう一度お試しください。');
+      // エラー内容を詳細に表示
+      setSaveError('保存に失敗しました。' + (e?.message || 'もう一度お試しください。'));
       setIsSaving(false);
+      console.error('保存エラー:', e);
     }
   };
 
