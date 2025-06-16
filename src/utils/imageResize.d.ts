@@ -1,0 +1,1 @@
+export function resizeImage(file: File, maxWidth: number, maxHeight: number): Promise<File>; 

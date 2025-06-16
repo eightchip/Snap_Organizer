@@ -8,6 +8,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { rustResizeImage } from '../../utils/rustImageResize';
 import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
+import { resizeImage } from '../../utils/imageResize.ts';
 
 interface AddScreenProps {
   onSave: (data: {
@@ -102,7 +103,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!image || !ocrText.trim()) {
       alert('画像とOCRテキストが必要です');
       return;
@@ -110,10 +111,10 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     setIsSaving(true);
     setSaveError(null);
     try {
-      // 保存前にデータ内容をログ
-      console.log('保存データ:', { image, ocrText, tags: selectedTags, memo });
+      // 画像をリサイズ（最大幅1000px、最大高さ1000px、画質80%）
+      const resizedImage = await resizeImage(dataURLtoFile(image, 'image.jpg'), 1000, 1000);
       onSave({
-        image,
+        image: URL.createObjectURL(resizedImage),
         ocrText: normalizeOcrText(ocrText),
         tags: selectedTags,
         memo
@@ -124,10 +125,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
         setIsSaving(false);
       }, 2000);
     } catch (e: any) {
-      // エラー内容を詳細に表示
-      setSaveError('保存に失敗しました。' + (e?.message || 'もう一度お試しください。'));
+      setSaveError('保存に失敗しました。画像サイズが大きすぎる可能性があります。');
       setIsSaving(false);
-      console.error('保存エラー:', e);
     }
   };
 
