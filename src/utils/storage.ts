@@ -1,6 +1,7 @@
-import { PostalItem } from '../types';
+import { PostalItem, PostalItemGroup } from '../types';
 
 const STORAGE_KEY = 'postal-snap-items';
+const GROUP_STORAGE_KEY = 'postal-snap-groups';
 
 export const saveItems = (items: PostalItem[]): void => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -17,6 +18,44 @@ export const loadItems = (): PostalItem[] => {
   }));
 };
 
+export const saveGroups = (groups: PostalItemGroup[]): void => {
+  localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groups));
+};
+
+export const loadGroups = (): PostalItemGroup[] => {
+  const stored = localStorage.getItem(GROUP_STORAGE_KEY);
+  if (!stored) return [];
+  
+  return JSON.parse(stored).map((group: any) => ({
+    ...group,
+    createdAt: new Date(group.createdAt),
+    updatedAt: new Date(group.updatedAt)
+  }));
+};
+
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
+// インポート/エクスポート用の統合データ型
+export interface StorageData {
+  items: PostalItem[];
+  groups: PostalItemGroup[];
+  tags: any[];
+}
+
+// 統合データの保存
+export const saveAllData = (data: StorageData): void => {
+  if (data.items) saveItems(data.items);
+  if (data.groups) saveGroups(data.groups);
+  if (data.tags) localStorage.setItem('postal_tags', JSON.stringify(data.tags));
+};
+
+// 統合データの読み込み
+export const loadAllData = (): StorageData => {
+  return {
+    items: loadItems(),
+    groups: loadGroups(),
+    tags: JSON.parse(localStorage.getItem('postal_tags') || '[]')
+  };
 };

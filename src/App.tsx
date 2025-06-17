@@ -80,6 +80,8 @@ function App() {
             updatedAt: new Date(item.updatedAt),
           }));
           setItems(fixedItems);
+          // localStorageにも保存
+          localStorage.setItem('postal-snap-items', JSON.stringify(fixedItems));
         }
         if (json.tags && Array.isArray(json.tags)) {
           // 現在のタグを取得

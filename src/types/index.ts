@@ -6,6 +6,23 @@ export interface PostalItem {
   memo: string;
   createdAt: Date;
   updatedAt: Date;
+  groupId?: string;
+}
+
+export interface PhotoItem {
+  id: string;
+  image: string;
+  ocrText: string;
+}
+
+export interface PostalItemGroup {
+  id: string;
+  title: string;
+  photos: PhotoItem[];
+  tags: string[];
+  memo: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Tag {
@@ -15,7 +32,7 @@ export interface Tag {
   count: number;
 }
 
-export type Screen = 'home' | 'add' | 'detail';
+export type Screen = 'home' | 'add' | 'detail' | 'add-group';
 
 export interface AppState {
   currentScreen: Screen;
