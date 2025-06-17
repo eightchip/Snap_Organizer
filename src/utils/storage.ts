@@ -77,20 +77,3 @@ try {
 } catch (e) {
   alert('localStorageが利用できません: ' + e);
 }
-
-const fallbackResizedDataURL = await new Promise<string>((resolve) => {
-  const img = new window.Image();
-  img.onload = function() {
-    let { width, height } = img;
-    const scale = Math.min(300 / width, 300 / height, 1);
-    width = Math.round(width * scale);
-    height = Math.round(height * scale);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, width, height);
-    resolve(canvas.toDataURL('image/jpeg', 0.5)); // 画質50%
-  };
-  img.src = URL.createObjectURL(file);
-});
