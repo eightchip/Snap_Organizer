@@ -6,7 +6,22 @@ import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import EXIF from 'exif-js';
-import init from '../../pkg/your_wasm_pkg';
+import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
+
+// Base64変換用ユーティリティ関数
+function uint8ToBase64(u8arr: Uint8Array): string {
+  let CHUNK_SIZE = 0x8000; // 32KB
+  let index = 0;
+  let length = u8arr.length;
+  let result = '';
+  let slice;
+  while (index < length) {
+    slice = u8arr.subarray(index, Math.min(index + CHUNK_SIZE, length));
+    result += String.fromCharCode.apply(null, slice);
+    index += CHUNK_SIZE;
+  }
+  return btoa(result);
+}
 
 interface AddGroupScreenProps {
   onSave: (group: PostalItemGroup) => void;
@@ -44,27 +59,25 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
     console.log('Starting image processing for:', file.name);
     
+    if (!wasmReady) {
+      throw new Error('システムの初期化中です。少し待ってから再度お試しください。');
+    }
+
     try {
-      // まず基本的な画像の読み込みを試みる
+      // 基本的な画像変換
       const imageDataURL = await imageToDataURL(file);
       console.log('Basic image conversion complete');
 
-      // 画像のリサイズ処理
-      const resizedImage = await resizeImage(file, 800, 800, 0.8);
-      console.log('Image resize complete. New size:', resizedImage.size);
-
-      // リサイズした画像をDataURLに変換
-      const resizedDataURL = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (e) => {
-          console.error('FileReader error:', e);
-          reject(new Error('画像の読み込みに失敗しました'));
-        };
-        reader.readAsDataURL(resizedImage);
-      });
-
-      console.log('Resized image conversion complete');
+      // WASM処理用にbase64からUint8Arrayに変換
+      const base64 = imageDataURL.split(',')[1];
+      const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      
+      // WASMで前処理
+      console.log('Starting WASM preprocessing');
+      const processed = await preprocess_image(imageBuffer);
+      const processedBase64 = uint8ToBase64(processed);
+      const processedDataURL = 'data:image/png;base64,' + processedBase64;
+      console.log('WASM preprocessing complete');
 
       // EXIFデータの読み取り
       const metadata: PhotoMetadata = await new Promise((resolve) => {
@@ -74,12 +87,10 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
           try {
             if (exifData) {
-              // 撮影日時
               if (exifData.DateTime) {
                 metadata.dateTime = exifData.DateTime;
               }
 
-              // GPS情報
               if (exifData.GPSLatitude && exifData.GPSLongitude) {
                 const convertDMSToDD = (dms: number[], dir: string) => {
                   const degrees = dms[0];
@@ -104,11 +115,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
                 }
               }
 
-              // カメラ情報
               if (exifData.Make) metadata.make = exifData.Make;
               if (exifData.Model) metadata.model = exifData.Model;
-              
-              // 画像の向き
               if (exifData.Orientation) metadata.orientation = exifData.Orientation;
             }
           } catch (e) {
@@ -122,12 +130,12 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       console.log('EXIF data extraction complete');
 
       return {
-        dataUrl: resizedDataURL,
+        dataUrl: processedDataURL,
         metadata
       };
     } catch (error) {
       console.error('Image processing error:', error);
-      throw new Error('画像の処理中にエラーが発生しました: ' + (error as Error).message);
+      throw error;
     }
   };
 
@@ -160,13 +168,6 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
       setIsProcessing(true);
       setSaveError(null);
-      
-      console.log('Processing files:', files.map(f => ({
-        name: f.name,
-        type: f.type,
-        size: f.size,
-        lastModified: new Date(f.lastModified).toISOString()
-      })));
 
       for (const file of files) {
         try {
@@ -177,15 +178,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           console.log(`Processing file: ${file.name} (${file.size} bytes)`);
           
           const { dataUrl: imageDataURL, metadata } = await processImage(file);
-          console.log('Image processing complete:', {
-            fileName: file.name,
-            originalSize: file.size,
-            processedSize: imageDataURL.length,
-            hasMetadata: !!metadata,
-            metadataKeys: metadata ? Object.keys(metadata) : []
-          });
+          console.log('Image processing complete');
 
-          // メタデータから撮影日時を取得、なければファイルの最終更新日時を使用
           const photoDate = metadata.dateTime 
             ? new Date(metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'))
             : file.lastModified 
@@ -206,7 +200,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         } catch (fileError: any) {
           console.error(`Error processing file ${file.name}:`, fileError);
           setSaveError(`${file.name}の処理中にエラーが発生しました: ${fileError.message}`);
-          return; // 1つのファイルでもエラーが発生したら処理を中止
+          return;
         }
       }
 
@@ -215,7 +209,6 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
-      // 入力をリセット（同じファイルを再度選択できるように）
       if (event.target) {
         event.target.value = '';
       }
