@@ -4,7 +4,7 @@ interface TagChipProps {
   tag: string;
   selected?: boolean;
   count?: number;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
   removable?: boolean;
   onRemove?: () => void;
   style?: React.CSSProperties;

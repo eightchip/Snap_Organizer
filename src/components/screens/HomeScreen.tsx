@@ -4,7 +4,7 @@ import { PostalItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
@@ -18,6 +18,7 @@ interface HomeScreenProps {
   onTagToggle: (tag: string) => void;
   onAddItem: (mode: 'single' | 'group') => void;
   onItemClick: (itemId: string) => void;
+  onGroupClick: (groupId: string) => void;
   onBulkTagRename: (oldName: string, newName: string) => void;
   onImport: (data: any) => void;
   onExport: () => void;
@@ -57,6 +58,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onTagToggle,
   onAddItem,
   onItemClick,
+  onGroupClick,
   onBulkTagRename,
   onImport,
   onExport
@@ -89,6 +91,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const [activeTab, setActiveTab] = useState<'single' | 'group'>('single');
   const [showTagFilter, setShowTagFilter] = useState(false);
+
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
 
   const { filteredItems, tagCounts } = useMemo(() => {
     // Calculate tag counts
@@ -203,25 +209,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // インポート機能
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // インポート処理
+  const handleImportSubmit = () => {
+    setImportError(null);
+    try {
+      const data = JSON.parse(importText);
+      onImport(data);
+      setShowImportModal(false);
+      setImportText('');
+    } catch (error) {
+      setImportError('JSONの形式が正しくありません');
+    }
+  };
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        if (!data.version || !data.items || !data.groups || !data.tags) {
-          throw new Error('Invalid file format');
-        }
-        // TODO: インポートの実装
-        alert('インポート機能は準備中です');
-      } catch (error) {
-        alert('インポートに失敗しました。ファイル形式を確認してください。');
-      }
-    };
-    reader.readAsText(file);
+  // クリップボードからのペースト
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setImportText(text);
+    } catch (error) {
+      setImportError('クリップボードからの読み取りに失敗しました');
+    }
   };
 
   return (
@@ -250,15 +258,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               >
                 <Download className="h-5 w-5 text-gray-600" />
               </button>
-              <label className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="インポート"
+              >
                 <Upload className="h-5 w-5 text-gray-600" />
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImport}
-                  className="hidden"
-                />
-              </label>
+              </button>
             </div>
           </div>
 
@@ -378,7 +384,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
             ) : (
               groups.map(group => (
-                <div key={group.id} className="bg-white rounded-xl p-4 shadow-sm">
+                <div
+                  key={group.id}
+                  className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => onGroupClick(group.id)}
+                >
                   <h3 className="font-medium text-lg mb-2">{group.title}</h3>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {group.tags.map(tag => (
@@ -386,7 +396,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         key={tag}
                         tag={tag}
                         selected={false}
-                        onClick={() => {}}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTagToggle(tag);
+                        }}
                         style={{
                           backgroundColor: (tags.find(t => t.name === tag)?.color || '#gray') + '22',
                           color: tags.find(t => t.name === tag)?.color || '#gray'
@@ -409,6 +422,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         src={photo.image}
                         alt=""
                         className="w-20 h-20 object-cover rounded"
+                        onClick={(e) => e.stopPropagation()}
                       />
                     ))}
                   </div>
@@ -525,6 +539,90 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 onClick={handleEditTag}
                 disabled={!editTagName.trim()}
               >保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* インポートモーダル */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">データのインポート</h3>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* ファイルアップロード */}
+                <label className="block p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer">
+                  <div className="flex items-center justify-center gap-2">
+                    <FileText className="h-6 w-6 text-gray-400" />
+                    <span className="text-gray-600">ファイルを選択</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          setImportText(e.target?.result as string);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                  />
+                </label>
+
+                <div className="relative">
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="JSONデータを直接入力またはペースト"
+                    className="w-full h-48 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handlePaste}
+                    className="absolute top-2 right-2 p-2 text-gray-400 hover:text-gray-600"
+                    title="クリップボードから貼り付け"
+                  >
+                    <Clipboard className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {importError && (
+                  <div className="text-red-500 text-sm">{importError}</div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowImportModal(false)}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleImportSubmit}
+                    disabled={!importText.trim()}
+                    className={`px-4 py-2 rounded-lg ${
+                      importText.trim()
+                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    インポート
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

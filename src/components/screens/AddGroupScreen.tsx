@@ -78,7 +78,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         newPhotos.push({
           id: generateId(),
           image: imageDataURL,
-          ocrText: ''
+          ocrText: '',
+          createdAt: new Date()
         });
       }
 

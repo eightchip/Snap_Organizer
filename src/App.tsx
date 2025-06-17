@@ -5,6 +5,7 @@ import { HomeScreen } from './components/screens/HomeScreen';
 import { AddScreen } from './components/screens/AddScreen';
 import { AddGroupScreen } from './components/screens/AddGroupScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
+import { DetailGroupScreen } from './components/screens/DetailGroupScreen';
 import { loadGroups, saveGroups } from './utils/storage';
 
 function App() {
@@ -171,6 +172,23 @@ function App() {
     saveGroups(updatedGroups);
   };
 
+  const handleUpdateGroup = (groupId: string, updates: Partial<PostalItemGroup>) => {
+    const updatedGroups = groups.map(group =>
+      group.id === groupId
+        ? { ...group, ...updates }
+        : group
+    );
+    setGroups(updatedGroups);
+    saveGroups(updatedGroups);
+  };
+
+  const handleDeleteGroup = (groupId: string) => {
+    const updatedGroups = groups.filter(group => group.id !== groupId);
+    setGroups(updatedGroups);
+    saveGroups(updatedGroups);
+    navigateTo('home');
+  };
+
   const renderScreen = () => {
     switch (appState.currentScreen) {
       case 'home':
@@ -190,6 +208,7 @@ function App() {
               onTagToggle={handleTagToggle}
               onAddItem={handleAddItem}
               onItemClick={(itemId) => navigateTo('detail', itemId)}
+              onGroupClick={(groupId) => navigateTo('detail-group', groupId)}
               onBulkTagRename={handleBulkTagRename}
               onImport={handleImport}
               onExport={handleExport}
@@ -225,6 +244,23 @@ function App() {
             onBack={() => navigateTo('home')}
             onUpdate={(updates) => handleUpdateItem(selectedItem.id, updates)}
             onDelete={() => handleDeleteItem(selectedItem.id)}
+          />
+        );
+
+      case 'detail-group':
+        const selectedGroup = appState.selectedItemId
+          ? groups.find(g => g.id === appState.selectedItemId)
+          : null;
+        if (!selectedGroup) {
+          navigateTo('home');
+          return null;
+        }
+        return (
+          <DetailGroupScreen
+            group={selectedGroup}
+            onBack={() => navigateTo('home')}
+            onUpdate={(updates) => handleUpdateGroup(selectedGroup.id, updates)}
+            onDelete={() => handleDeleteGroup(selectedGroup.id)}
           />
         );
 
