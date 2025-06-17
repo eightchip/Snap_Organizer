@@ -1,10 +1,20 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, ArrowLeft, Check, X } from 'lucide-react';
+import { Camera, Upload, ArrowLeft, Check, X, Info } from 'lucide-react';
 import { TagChip } from '../TagChip';
 import { PhotoItem, PostalItemGroup } from '../../types';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
+import EXIF from 'exif-js';
+
+interface PhotoMetadata {
+  dateTime?: string;
+  gpsLatitude?: number;
+  gpsLongitude?: number;
+  make?: string;
+  model?: string;
+  orientation?: number;
+}
 
 interface AddGroupScreenProps {
   onSave: (group: PostalItemGroup) => void;
@@ -24,8 +34,53 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     return saved ? JSON.parse(saved) : [];
   });
 
-  const processImage = async (file: File): Promise<string> => {
-    // まず小さいサイズ（400x400）で試す
+  const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
+    // EXIFデータの読み取り
+    const metadata: PhotoMetadata = await new Promise((resolve) => {
+      EXIF.getData(file as any, function(this: any) {
+        const exifData = EXIF.getAllTags(this);
+        const metadata: PhotoMetadata = {};
+
+        if (exifData) {
+          // 撮影日時
+          if (exifData.DateTime) {
+            metadata.dateTime = exifData.DateTime;
+          }
+
+          // GPS情報
+          if (exifData.GPSLatitude && exifData.GPSLongitude) {
+            const convertDMSToDD = (dms: number[], dir: string) => {
+              const degrees = dms[0];
+              const minutes = dms[1];
+              const seconds = dms[2];
+              let dd = degrees + minutes/60 + seconds/3600;
+              if (dir === 'S' || dir === 'W') dd = -dd;
+              return dd;
+            };
+            
+            metadata.gpsLatitude = convertDMSToDD(
+              exifData.GPSLatitude,
+              exifData.GPSLatitudeRef
+            );
+            metadata.gpsLongitude = convertDMSToDD(
+              exifData.GPSLongitude,
+              exifData.GPSLongitudeRef
+            );
+          }
+
+          // カメラ情報
+          if (exifData.Make) metadata.make = exifData.Make;
+          if (exifData.Model) metadata.model = exifData.Model;
+          
+          // 画像の向き
+          if (exifData.Orientation) metadata.orientation = exifData.Orientation;
+        }
+
+        resolve(metadata);
+      });
+    });
+
+    // 画像のリサイズ処理（既存のコード）
     let resizedImage = await resizeImage(file, 400, 400, 0.6);
     let imageDataURL = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -34,7 +89,6 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       reader.readAsDataURL(resizedImage);
     });
 
-    // サイズチェック（500KB以上なら、さらに圧縮）
     if (imageDataURL.length > 500 * 1024) {
       resizedImage = await resizeImage(file, 300, 300, 0.5);
       imageDataURL = await new Promise<string>((resolve, reject) => {
@@ -45,14 +99,13 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       });
     }
 
-    return imageDataURL;
+    return { dataUrl: imageDataURL, metadata };
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    // ファイル数の制限
     if (files.length > 20) {
       alert('一度に追加できる写真は20枚までです');
       return;
@@ -63,27 +116,32 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     
     try {
       for (const file of files) {
-        // ファイルタイプチェック
         if (!file.type.startsWith('image/')) {
           throw new Error(`${file.name} は画像ファイルではありません`);
         }
 
-        const imageDataURL = await processImage(file);
+        const { dataUrl: imageDataURL, metadata } = await processImage(file);
         
-        // 1枚あたりのサイズ制限（1MB）
         if (imageDataURL.length > 1024 * 1024) {
           throw new Error(`${file.name} のサイズが大きすぎます。より小さい画像を選択してください。`);
         }
+
+        // メタデータから撮影日時を取得、なければファイルの最終更新日時を使用
+        const photoDate = metadata.dateTime 
+          ? new Date(metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'))
+          : file.lastModified 
+            ? new Date(file.lastModified) 
+            : new Date();
 
         newPhotos.push({
           id: generateId(),
           image: imageDataURL,
           ocrText: '',
-          createdAt: new Date()
+          createdAt: photoDate,
+          metadata
         });
       }
 
-      // 合計サイズチェック（10MB）
       const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
       if (totalSize > 10 * 1024 * 1024) {
         throw new Error('写真の合計サイズが大きすぎます。より少ない枚数を選択してください。');
@@ -206,7 +264,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             className="hidden"
           />
 
-          {/* Photo Preview */}
+          {/* Photo Preview with Metadata */}
           {photos.length > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-2">
               {photos.map((photo) => (
@@ -222,6 +280,22 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
                   >
                     <X className="h-4 w-4" />
                   </button>
+                  {photo.metadata && (
+                    <button
+                      onClick={() => {
+                        if (!photo.metadata) return;
+                        const info = [
+                          photo.metadata.dateTime && `撮影日時: ${new Date(photo.metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3')).toLocaleString()}`,
+                          photo.metadata.make && photo.metadata.model && `カメラ: ${photo.metadata.make} ${photo.metadata.model}`,
+                          photo.metadata.gpsLatitude && photo.metadata.gpsLongitude && `位置情報: ${photo.metadata.gpsLatitude.toFixed(6)}, ${photo.metadata.gpsLongitude.toFixed(6)}`
+                        ].filter(Boolean).join('\n');
+                        if (info) alert(info);
+                      }}
+                      className="absolute top-1 left-1 p-1 bg-white bg-opacity-75 text-gray-700 rounded-full"
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

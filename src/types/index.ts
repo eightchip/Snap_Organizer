@@ -9,11 +9,21 @@ export interface PostalItem {
   groupId?: string;
 }
 
+export interface PhotoMetadata {
+  dateTime?: string;
+  gpsLatitude?: number;
+  gpsLongitude?: number;
+  make?: string;
+  model?: string;
+  orientation?: number;
+}
+
 export interface PhotoItem {
   id: string;
   image: string;
   ocrText: string;
   createdAt: Date;
+  metadata?: PhotoMetadata;
 }
 
 export interface PostalItemGroup {
