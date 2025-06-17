@@ -26,6 +26,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   });
 
   const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
+    console.log('Starting image processing for:', file.name); // デバッグ用
+
     // EXIFデータの読み取り
     const metadata: PhotoMetadata = await new Promise((resolve) => {
       EXIF.getData(file as any, function(this: any) {
@@ -72,6 +74,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             
             // 画像の向き
             if (exifData.Orientation) metadata.orientation = exifData.Orientation;
+          } else {
+            console.log('No EXIF data found'); // デバッグ用
           }
         } catch (e) {
           console.error('EXIF parsing error:', e);
@@ -84,29 +88,52 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
     // 画像のリサイズ処理
     try {
-      let resizedImage = await resizeImage(file, 800, 800, 0.8); // サイズと品質を調整
+      console.log('Starting image resize. Original size:', file.size); // デバッグ用
+
+      // 初期リサイズ
+      let resizedImage = await resizeImage(file, 800, 800, 0.8);
+      console.log('First resize complete. New size:', resizedImage.size); // デバッグ用
+
       let imageDataURL = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
+        reader.onerror = (e) => {
+          console.error('FileReader error:', e); // デバッグ用
+          reject(e);
+        };
         reader.readAsDataURL(resizedImage);
       });
 
+      console.log('DataURL length after first resize:', imageDataURL.length); // デバッグ用
+
       // サイズが大きすぎる場合は更に圧縮
       if (imageDataURL.length > 1024 * 1024) {
+        console.log('Image still too large, performing second resize'); // デバッグ用
         resizedImage = await resizeImage(file, 600, 600, 0.7);
+        console.log('Second resize complete. New size:', resizedImage.size); // デバッグ用
+
         imageDataURL = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
+          reader.onerror = (e) => {
+            console.error('FileReader error:', e); // デバッグ用
+            reject(e);
+          };
           reader.readAsDataURL(resizedImage);
         });
+
+        console.log('DataURL length after second resize:', imageDataURL.length); // デバッグ用
+      }
+
+      // 最終チェック
+      if (imageDataURL.length > 2 * 1024 * 1024) {
+        console.warn('Warning: Final image size still large:', imageDataURL.length); // デバッグ用
       }
 
       return { dataUrl: imageDataURL, metadata };
     } catch (e) {
       console.error('Image resize error:', e);
-      throw e;
+      throw new Error(`画像の処理に失敗しました: ${e.message}`);
     }
   };
 
@@ -123,12 +150,17 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     const newPhotos: PhotoItem[] = [];
     
     try {
+      console.log('Selected files:', files.map(f => ({ name: f.name, type: f.type, size: f.size }))); // デバッグ用
+
       for (const file of files) {
         if (!file.type.startsWith('image/')) {
           throw new Error(`${file.name} は画像ファイルではありません`);
         }
 
+        console.log('Processing file:', file.name); // デバッグ用
         const { dataUrl: imageDataURL, metadata } = await processImage(file);
+        console.log('Processed image size:', imageDataURL.length); // デバッグ用
+        console.log('Extracted metadata:', metadata); // デバッグ用
         
         if (imageDataURL.length > 1024 * 1024) {
           throw new Error(`${file.name} のサイズが大きすぎます。より小さい画像を選択してください。`);
@@ -141,24 +173,49 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             ? new Date(file.lastModified) 
             : new Date();
 
-        newPhotos.push({
+        const newPhoto: PhotoItem = {
           id: generateId(),
           image: imageDataURL,
           ocrText: '',
           createdAt: photoDate,
           metadata
-        });
+        };
+
+        console.log('Created new photo object:', { 
+          id: newPhoto.id, 
+          hasMetadata: !!newPhoto.metadata,
+          createdAt: newPhoto.createdAt,
+          imageSize: newPhoto.image.length 
+        }); // デバッグ用
+
+        newPhotos.push(newPhoto);
       }
 
       const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
+      console.log('Total size of new photos:', totalSize); // デバッグ用
+
       if (totalSize > 10 * 1024 * 1024) {
         throw new Error('写真の合計サイズが大きすぎます。より少ない枚数を選択してください。');
       }
 
-      setPhotos([...photos, ...newPhotos]);
+      setPhotos(prevPhotos => {
+        const updatedPhotos = [...prevPhotos, ...newPhotos];
+        console.log('Updated photos array:', updatedPhotos.map(p => ({ 
+          id: p.id, 
+          hasMetadata: !!p.metadata,
+          createdAt: p.createdAt 
+        }))); // デバッグ用
+        return updatedPhotos;
+      });
+
     } catch (error: any) {
       console.error('Error processing images:', error);
       setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
+    }
+
+    // 入力をリセット（同じファイルを再度選択できるように）
+    if (event.target) {
+      event.target.value = '';
     }
   };
 
@@ -221,7 +278,18 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   } | null>(null);
 
   const showMetadataModal = (photo: PhotoItem) => {
-    if (!photo.metadata) return;
+    console.log('Showing metadata for photo:', { 
+      id: photo.id, 
+      hasMetadata: !!photo.metadata,
+      metadata: photo.metadata 
+    }); // デバッグ用
+
+    if (!photo.metadata) {
+      console.log('No metadata available for photo:', photo.id); // デバッグ用
+      alert('この写真にはメタデータが含まれていません');
+      return;
+    }
+
     setSelectedPhotoMetadata({
       metadata: photo.metadata,
       image: photo.image
