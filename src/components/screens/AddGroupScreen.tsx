@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, ArrowLeft, Check, X, Info } from 'lucide-react';
 import { TagChip } from '../TagChip';
 import { PhotoItem, PostalItemGroup, PhotoMetadata } from '../../types';
@@ -6,6 +6,7 @@ import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import EXIF from 'exif-js';
+import init from '../../pkg/your_wasm_pkg';
 
 interface AddGroupScreenProps {
   onSave: (group: PostalItemGroup) => void;
@@ -19,12 +20,26 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   const [memo, setMemo] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [wasmReady, setWasmReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [tags, setTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    init()
+      .then(() => {
+        console.log('WASM initialized successfully');
+        setWasmReady(true);
+      })
+      .catch(error => {
+        console.error('WASM initialization failed:', error);
+        setSaveError('システムの初期化に失敗しました。ページを再読み込みしてください。');
+      });
+  }, []);
 
   const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
     console.log('Starting image processing for:', file.name);
@@ -117,11 +132,21 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('File selection triggered'); // 基本的なトリガー確認
+    if (!wasmReady) {
+      setSaveError('システムの初期化中です。少し待ってから再度お試しください。');
+      return;
+    }
+
+    if (isProcessing) {
+      console.log('Already processing images, please wait...');
+      return;
+    }
+
+    console.log('File selection triggered');
     
     try {
       const files = Array.from(event.target.files || []);
-      console.log('Files selected:', files.length); // ファイル数の確認
+      console.log('Files selected:', files.length);
       
       if (files.length === 0) {
         console.log('No files selected');
@@ -133,15 +158,15 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         return;
       }
 
+      setIsProcessing(true);
       setSaveError(null);
-      const newPhotos: PhotoItem[] = [];
       
       console.log('Processing files:', files.map(f => ({
         name: f.name,
         type: f.type,
         size: f.size,
         lastModified: new Date(f.lastModified).toISOString()
-      }))); // より詳細なファイル情報
+      })));
 
       for (const file of files) {
         try {
@@ -160,10 +185,6 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             metadataKeys: metadata ? Object.keys(metadata) : []
           });
 
-          if (imageDataURL.length > 2 * 1024 * 1024) {
-            console.warn(`Large image warning: ${file.name} (${imageDataURL.length} bytes)`);
-          }
-
           // メタデータから撮影日時を取得、なければファイルの最終更新日時を使用
           const photoDate = metadata.dateTime 
             ? new Date(metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'))
@@ -179,7 +200,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             metadata
           };
 
-          newPhotos.push(newPhoto);
+          setPhotos(prevPhotos => [...prevPhotos, newPhoto]);
           console.log(`Successfully added photo: ${newPhoto.id}`);
 
         } catch (fileError: any) {
@@ -189,27 +210,15 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         }
       }
 
-      const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
-      console.log('Total size of processed photos:', totalSize);
-
-      if (totalSize > 10 * 1024 * 1024) {
-        throw new Error('写真の合計サイズが大きすぎます。より少ない枚数を選択してください。');
-      }
-
-      setPhotos(prevPhotos => {
-        const updatedPhotos = [...prevPhotos, ...newPhotos];
-        console.log('Updated photos array:', updatedPhotos.length);
-        return updatedPhotos;
-      });
-
     } catch (error: any) {
       console.error('File selection error:', error);
       setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
-    }
-
-    // 入力をリセット（同じファイルを再度選択できるように）
-    if (event.target) {
-      event.target.value = '';
+    } finally {
+      setIsProcessing(false);
+      // 入力をリセット（同じファイルを再度選択できるように）
+      if (event.target) {
+        event.target.value = '';
+      }
     }
   };
 
@@ -335,18 +344,30 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           <div className="space-y-3">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              disabled={isProcessing || !wasmReady}
+              className={`w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed rounded-lg transition-colors
+                ${isProcessing || !wasmReady 
+                  ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
+                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}`}
             >
-              <Upload className="h-6 w-6 text-gray-400" />
-              <span className="text-gray-600">ギャラリーから選択（複数可）</span>
+              <Upload className={`h-6 w-6 ${isProcessing || !wasmReady ? 'text-gray-300' : 'text-gray-400'}`} />
+              <span className={isProcessing || !wasmReady ? 'text-gray-400' : 'text-gray-600'}>
+                {isProcessing ? '処理中...' : 'ギャラリーから選択（複数可）'}
+              </span>
             </button>
             
             <button
               onClick={() => cameraInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              disabled={isProcessing || !wasmReady}
+              className={`w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed rounded-lg transition-colors
+                ${isProcessing || !wasmReady 
+                  ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
+                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}`}
             >
-              <Camera className="h-6 w-6 text-gray-400" />
-              <span className="text-gray-600">カメラで撮影</span>
+              <Camera className={`h-6 w-6 ${isProcessing || !wasmReady ? 'text-gray-300' : 'text-gray-400'}`} />
+              <span className={isProcessing || !wasmReady ? 'text-gray-400' : 'text-gray-600'}>
+                {isProcessing ? '処理中...' : 'カメラで撮影'}
+              </span>
             </button>
           </div>
           <input
@@ -356,6 +377,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             multiple
             onChange={handleFileSelect}
             className="hidden"
+            disabled={isProcessing || !wasmReady}
           />
           <input
             ref={cameraInputRef}
@@ -364,7 +386,20 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             capture="environment"
             onChange={handleFileSelect}
             className="hidden"
+            disabled={isProcessing || !wasmReady}
           />
+
+          {!wasmReady && (
+            <p className="mt-2 text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
+              システムの初期化中です。しばらくお待ちください...
+            </p>
+          )}
+
+          {saveError && (
+            <p className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+              {saveError}
+            </p>
+          )}
 
           {/* Photo Preview with Metadata */}
           {photos.length > 0 && (
