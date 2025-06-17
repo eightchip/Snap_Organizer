@@ -1,20 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, ArrowLeft, Check, X, Info } from 'lucide-react';
 import { TagChip } from '../TagChip';
-import { PhotoItem, PostalItemGroup } from '../../types';
+import { PhotoItem, PostalItemGroup, PhotoMetadata } from '../../types';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import EXIF from 'exif-js';
-
-interface PhotoMetadata {
-  dateTime?: string;
-  gpsLatitude?: number;
-  gpsLongitude?: number;
-  make?: string;
-  model?: string;
-  orientation?: number;
-}
 
 interface AddGroupScreenProps {
   onSave: (group: PostalItemGroup) => void;
@@ -41,65 +32,82 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         const exifData = EXIF.getAllTags(this);
         const metadata: PhotoMetadata = {};
 
-        if (exifData) {
-          // 撮影日時
-          if (exifData.DateTime) {
-            metadata.dateTime = exifData.DateTime;
-          }
+        try {
+          if (exifData) {
+            console.log('EXIF data found:', exifData); // デバッグ用
 
-          // GPS情報
-          if (exifData.GPSLatitude && exifData.GPSLongitude) {
-            const convertDMSToDD = (dms: number[], dir: string) => {
-              const degrees = dms[0];
-              const minutes = dms[1];
-              const seconds = dms[2];
-              let dd = degrees + minutes/60 + seconds/3600;
-              if (dir === 'S' || dir === 'W') dd = -dd;
-              return dd;
-            };
+            // 撮影日時
+            if (exifData.DateTime) {
+              metadata.dateTime = exifData.DateTime;
+            }
+
+            // GPS情報
+            if (exifData.GPSLatitude && exifData.GPSLongitude) {
+              const convertDMSToDD = (dms: number[], dir: string) => {
+                const degrees = dms[0];
+                const minutes = dms[1];
+                const seconds = dms[2];
+                let dd = degrees + minutes/60 + seconds/3600;
+                if (dir === 'S' || dir === 'W') dd = -dd;
+                return dd;
+              };
+              
+              try {
+                metadata.gpsLatitude = convertDMSToDD(
+                  exifData.GPSLatitude,
+                  exifData.GPSLatitudeRef
+                );
+                metadata.gpsLongitude = convertDMSToDD(
+                  exifData.GPSLongitude,
+                  exifData.GPSLongitudeRef
+                );
+              } catch (e) {
+                console.error('GPS conversion error:', e);
+              }
+            }
+
+            // カメラ情報
+            if (exifData.Make) metadata.make = exifData.Make;
+            if (exifData.Model) metadata.model = exifData.Model;
             
-            metadata.gpsLatitude = convertDMSToDD(
-              exifData.GPSLatitude,
-              exifData.GPSLatitudeRef
-            );
-            metadata.gpsLongitude = convertDMSToDD(
-              exifData.GPSLongitude,
-              exifData.GPSLongitudeRef
-            );
+            // 画像の向き
+            if (exifData.Orientation) metadata.orientation = exifData.Orientation;
           }
-
-          // カメラ情報
-          if (exifData.Make) metadata.make = exifData.Make;
-          if (exifData.Model) metadata.model = exifData.Model;
-          
-          // 画像の向き
-          if (exifData.Orientation) metadata.orientation = exifData.Orientation;
+        } catch (e) {
+          console.error('EXIF parsing error:', e);
         }
 
+        console.log('Processed metadata:', metadata); // デバッグ用
         resolve(metadata);
       });
     });
 
-    // 画像のリサイズ処理（既存のコード）
-    let resizedImage = await resizeImage(file, 400, 400, 0.6);
-    let imageDataURL = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(resizedImage);
-    });
-
-    if (imageDataURL.length > 500 * 1024) {
-      resizedImage = await resizeImage(file, 300, 300, 0.5);
-      imageDataURL = await new Promise<string>((resolve, reject) => {
+    // 画像のリサイズ処理
+    try {
+      let resizedImage = await resizeImage(file, 800, 800, 0.8); // サイズと品質を調整
+      let imageDataURL = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = reject;
         reader.readAsDataURL(resizedImage);
       });
-    }
 
-    return { dataUrl: imageDataURL, metadata };
+      // サイズが大きすぎる場合は更に圧縮
+      if (imageDataURL.length > 1024 * 1024) {
+        resizedImage = await resizeImage(file, 600, 600, 0.7);
+        imageDataURL = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(resizedImage);
+        });
+      }
+
+      return { dataUrl: imageDataURL, metadata };
+    } catch (e) {
+      console.error('Image resize error:', e);
+      throw e;
+    }
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -206,6 +214,20 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     setPhotos(photos.filter(p => p.id !== photoId));
   };
 
+  // メタデータ表示用のモーダル
+  const [selectedPhotoMetadata, setSelectedPhotoMetadata] = useState<{
+    metadata: PhotoMetadata;
+    image: string;
+  } | null>(null);
+
+  const showMetadataModal = (photo: PhotoItem) => {
+    if (!photo.metadata) return;
+    setSelectedPhotoMetadata({
+      metadata: photo.metadata,
+      image: photo.image
+    });
+  };
+
   return (
     <div className="min-h-screen max-h-screen overflow-auto bg-gray-50">
       <div className="bg-white shadow-sm sticky top-0 z-10">
@@ -276,26 +298,16 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
                   />
                   <button
                     onClick={() => removePhoto(photo.id)}
-                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"
+                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
                   >
                     <X className="h-4 w-4" />
                   </button>
-                  {photo.metadata && (
-                    <button
-                      onClick={() => {
-                        if (!photo.metadata) return;
-                        const info = [
-                          photo.metadata.dateTime && `撮影日時: ${new Date(photo.metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3')).toLocaleString()}`,
-                          photo.metadata.make && photo.metadata.model && `カメラ: ${photo.metadata.make} ${photo.metadata.model}`,
-                          photo.metadata.gpsLatitude && photo.metadata.gpsLongitude && `位置情報: ${photo.metadata.gpsLatitude.toFixed(6)}, ${photo.metadata.gpsLongitude.toFixed(6)}`
-                        ].filter(Boolean).join('\n');
-                        if (info) alert(info);
-                      }}
-                      className="absolute top-1 left-1 p-1 bg-white bg-opacity-75 text-gray-700 rounded-full"
-                    >
-                      <Info className="h-4 w-4" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => showMetadataModal(photo)}
+                    className="absolute top-1 left-1 p-1.5 bg-white bg-opacity-75 text-gray-700 rounded-full hover:bg-opacity-100"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -343,6 +355,59 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           <div className="bg-white p-4 rounded-lg">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
             <p className="mt-2 text-sm text-gray-600">保存中...</p>
+          </div>
+        </div>
+      )}
+
+      {/* メタデータ表示モーダル */}
+      {selectedPhotoMetadata && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">写真の情報</h3>
+                <button
+                  onClick={() => setSelectedPhotoMetadata(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <img
+                src={selectedPhotoMetadata.image}
+                alt="選択された写真"
+                className="w-full h-48 object-contain mb-4 rounded"
+              />
+
+              <div className="space-y-2 text-sm">
+                {selectedPhotoMetadata.metadata.dateTime && (
+                  <p>
+                    <span className="font-medium">撮影日時：</span>
+                    {new Date(selectedPhotoMetadata.metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3')).toLocaleString()}
+                  </p>
+                )}
+                {selectedPhotoMetadata.metadata.make && selectedPhotoMetadata.metadata.model && (
+                  <p>
+                    <span className="font-medium">カメラ：</span>
+                    {selectedPhotoMetadata.metadata.make} {selectedPhotoMetadata.metadata.model}
+                  </p>
+                )}
+                {selectedPhotoMetadata.metadata.gpsLatitude && selectedPhotoMetadata.metadata.gpsLongitude && (
+                  <p>
+                    <span className="font-medium">位置情報：</span>
+                    <a
+                      href={`https://www.google.com/maps?q=${selectedPhotoMetadata.metadata.gpsLatitude},${selectedPhotoMetadata.metadata.gpsLongitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:text-blue-600"
+                    >
+                      地図で見る
+                    </a>
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

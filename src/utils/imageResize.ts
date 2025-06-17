@@ -1,62 +1,72 @@
-export const resizeImage = (
+export const resizeImage = async (
   file: File,
   maxWidth: number,
   maxHeight: number,
   quality: number = 0.8
-): Promise<File> => {
-  return new Promise((resolve) => {
+): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      // 元のアスペクト比を維持しながら、より小さいサイズにリサイズ
-      let { width, height } = img;
-      
-      // 長辺を基準にスケールを計算
-      const maxSize = Math.max(width, height);
-      const targetSize = Math.min(maxWidth, maxHeight);
-      const scale = targetSize / maxSize;
-      
-      if (scale < 1) {
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
+      try {
+        // 元の画像のアスペクト比を維持
+        let width = img.width;
+        let height = img.height;
+        const aspectRatio = width / height;
+
+        // 最大サイズに合わせてリサイズ
+        if (width > maxWidth) {
+          width = maxWidth;
+          height = width / aspectRatio;
+        }
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * aspectRatio;
+        }
+
+        // キャンバスの作成
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas context not available'));
+          return;
+        }
+
+        // 画像の描画
+        ctx.fillStyle = 'white'; // 背景を白に
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Blob形式で出力
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to create blob'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      } catch (e) {
+        reject(e);
       }
-
-      // さらに、面積が大きすぎる場合は追加で縮小
-      const maxArea = 480000; // 800x600相当
-      const area = width * height;
-      if (area > maxArea) {
-        const areaScale = Math.sqrt(maxArea / area);
-        width = Math.round(width * areaScale);
-        height = Math.round(height * areaScale);
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d')!;
-
-      // 画質改善のための設定
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-
-      // 描画
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // JPEG形式で圧縮
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            // ファイル名に最適化済みであることを示す接尾辞を追加
-            const optimizedName = file.name.replace(
-              /(\.[^.]+)?$/,
-              '_optimized.jpg'
-            );
-            resolve(new File([blob], optimizedName, { type: 'image/jpeg' }));
-          }
-        },
-        'image/jpeg',
-        quality
-      );
     };
-    img.src = URL.createObjectURL(file);
+
+    img.onerror = () => {
+      reject(new Error('Failed to load image'));
+    };
+
+    // ファイルをData URLとして読み込み
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      reject(new Error('Failed to read file'));
+    };
+    reader.readAsDataURL(file);
   });
 }; 
