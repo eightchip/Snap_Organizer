@@ -9,6 +9,8 @@ import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { rustResizeImage } from '../../utils/rustImageResize';
 import init, { preprocess_image, preprocess_image_color } from '../../pkg/your_wasm_pkg';
 import { resizeImage } from '../../utils/imageResize.ts';
+import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
+import { generateId } from '../../utils/storage';
 
 interface AddScreenProps {
   onSave: (data: {
@@ -50,6 +52,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   const [showSaved, setShowSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string>('');
 
   useEffect(() => {
     init().then(() => setWasmReady(true)).catch(console.error);
@@ -59,6 +62,14 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     const saved = localStorage.getItem('postal_tags');
     if (saved) setTags(JSON.parse(saved));
   }, []);
+
+  useEffect(() => {
+    if (image) {
+      loadImageBlob(image).then(blob => {
+        if (blob) setImageUrl(URL.createObjectURL(blob));
+      });
+    }
+  }, [image]);
 
   const processImage = async (file: File) => {
     if (!wasmReady) {
@@ -85,13 +96,12 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      imageToDataURL(file).then(imageDataURL => {
-        setImage(imageDataURL); // 表示・保存用
-        // OCR用前処理はここで実施
-      });
+      const imageId = generateId();
+      await saveImageBlob(imageId, file); // fileまたはリサイズ後Blob
+      setImage(imageId); // 画像IDを保存
     }
   };
 
@@ -396,7 +406,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
                       >
                         <img
                           ref={idx === 0 ? imgRef : undefined}
-                          src={image}
+                          src={imageUrl || ''}
                           alt={`撮影画像${idx+1}`}
                           className="max-img-preview"
                         />
@@ -425,7 +435,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
                   <div>
                     <img
                       ref={imgRef}
-                      src={image}
+                      src={imageUrl || ''}
                       alt="撮影画像"
                       style={{ transform: `rotate(${rotation}deg)` }}
                       className="max-w-full max-h-[40vh] object-contain mx-auto"

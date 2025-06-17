@@ -6,6 +6,7 @@ import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import EXIF from 'exif-js';
+import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 
 // 開発環境でのみErudaを読み込む
 if (process.env.NODE_ENV === 'development') {
@@ -79,6 +80,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
   });
+  const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
 
   // エラーログを保存する関数
   const saveErrorLog = (error: any, context: string) => {
@@ -171,9 +173,11 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         }
 
         const metadata: PhotoMetadata = { dateTime: new Date().toISOString() };
+        const imageId = generateId();
+        await saveImageBlob(imageId, file); // fileまたはリサイズ後Blob
         processedPhotos.push({
           id: generateId(),
-          image: finalDataURL,
+          image: imageId, // 画像IDを保存
           ocrText: '',
           createdAt: new Date(metadata.dateTime ?? Date.now()),
           metadata
@@ -276,6 +280,19 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       image: photo.image
     });
   };
+
+  useEffect(() => {
+    (async () => {
+      const map: Record<string, string> = {};
+      for (const photo of photos) {
+        if (photo.image && !imageUrlMap[photo.image]) {
+          const blob = await loadImageBlob(photo.image);
+          if (blob) map[photo.image] = URL.createObjectURL(blob);
+        }
+      }
+      setImageUrlMap(map);
+    })();
+  }, [photos]);
 
   return (
     <div className="min-h-screen max-h-screen overflow-auto bg-gray-50">
@@ -409,7 +426,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
               {photos.map((photo) => (
                 <div key={photo.id} className="relative">
                   <img
-                    src={photo.image}
+                    src={imageUrlMap[photo.image] || ''}
                     alt="プレビュー"
                     className="w-full h-40 object-contain rounded"
                   />
