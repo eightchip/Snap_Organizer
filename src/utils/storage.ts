@@ -4,7 +4,12 @@ const STORAGE_KEY = 'postal-snap-items';
 const GROUP_STORAGE_KEY = 'postal-snap-groups';
 
 export const saveItems = (items: PostalItem[]): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch (e) {
+    alert('保存に失敗しました（容量制限の可能性があります）');
+    console.error('localStorage save error:', e);
+  }
 };
 
 export const loadItems = (): PostalItem[] => {
@@ -19,7 +24,12 @@ export const loadItems = (): PostalItem[] => {
 };
 
 export const saveGroups = (groups: PostalItemGroup[]): void => {
-  localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groups));
+  try {
+    localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groups));
+  } catch (e) {
+    alert('保存に失敗しました（容量制限の可能性があります）');
+    console.error('localStorage save error:', e);
+  }
 };
 
 export const loadGroups = (): PostalItemGroup[] => {
