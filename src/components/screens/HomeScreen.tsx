@@ -423,6 +423,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       >
         タグを初期状態に戻す
       </button>
+
+      <div>
+        <h2>グループ一覧</h2>
+        {groups.length === 0 && <div>グループはありません</div>}
+        {groups.map(group => (
+          <div key={group.id} style={{border: '1px solid #ccc', margin: 8, padding: 8}}>
+            <div>タイトル: {group.title}</div>
+            <div>写真枚数: {group.photos.length}</div>
+            <div>タグ: {group.tags.join(', ')}</div>
+            <div>メモ: {group.memo}</div>
+            <div>
+              {group.photos.map(photo => (
+                <img key={photo.id} src={photo.image} alt="" style={{width: 80, margin: 4}} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h2>単体アイテム一覧</h2>
+        {items.length === 0 && <div>アイテムはありません</div>}
+        {items.map(item => (
+          <div key={item.id} style={{border: '1px solid #ccc', margin: 8, padding: 8}}>
+            <div>タグ: {item.tags.join(', ')}</div>
+            <div>メモ: {item.memo}</div>
+            <img src={item.image} alt="" style={{width: 80, margin: 4}} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
