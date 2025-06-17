@@ -15,7 +15,7 @@ interface HomeScreenProps {
   selectedTags: string[];
   onSearchChange: (query: string) => void;
   onTagToggle: (tag: string) => void;
-  onAddItem: () => void;
+  onAddItem: (mode: 'single' | 'group') => void;
   onItemClick: (itemId: string) => void;
   onBulkTagRename: (oldName: string, newName: string) => void;
 }
@@ -176,7 +176,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* QRコード（テスト用: http://192.168.3.139:5173/ ） */}
       <div style={{ position: 'absolute', left: 8, top: 8, width: 40, height: 60, display: 'flex', alignItems: 'center' }}>
         <QRcode
@@ -394,13 +394,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         )}
       </div>
 
-      {/* Add Button */}
-      <button
-        onClick={onAddItem}
-        className="fixed bottom-6 right-6 bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 active:scale-95"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* 写真追加ボタン */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+        <button
+          onClick={() => onAddItem('group')}
+          className="p-4 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-colors"
+          title="写真グループを作成"
+        >
+          <Package className="h-6 w-6" />
+        </button>
+        <button
+          onClick={() => onAddItem('single')}
+          className="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+          title="写真を追加"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      </div>
 
       <button
         onClick={() => {

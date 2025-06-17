@@ -1,18 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Screen, AppState } from './types';
+import { Screen, AppState, PostalItemGroup } from './types';
 import { usePostalItems } from './hooks/usePostalItems';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { AddScreen } from './components/screens/AddScreen';
+import { AddGroupScreen } from './components/screens/AddGroupScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
+import { loadGroups, saveGroups, loadAllData, saveAllData } from './utils/storage';
 
 function App() {
   const { items, addItem, updateItem, deleteItem, getItem, setItems } = usePostalItems();
+  const [groups, setGroups] = useState<PostalItemGroup[]>([]);
   const [appState, setAppState] = useState<AppState>({
     currentScreen: 'home',
     selectedItemId: null,
     searchQuery: '',
     selectedTags: []
   });
+
+  // グループデータの読み込み
+  useEffect(() => {
+    setGroups(loadGroups());
+  }, []);
 
   // --- エクスポート・インポート機能 ---
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,19 +36,16 @@ function App() {
 
   // エクスポート
   const handleExport = () => {
-    if (items.length === 0) {
+    const data = loadAllData();
+    if (data.items.length === 0 && data.groups.length === 0) {
       alert('エクスポートできるデータがありません');
       return;
     }
-    const data = {
-      items,
-      tags: getTags(),
-    };
+    
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     
     // モバイルデバイスの場合の処理
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-      // モバイルデバイスではダウンロードリンクを表示
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -48,13 +53,11 @@ function App() {
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      // 少し待ってから要素を削除
       setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }, 100);
     } else {
-      // PCでは通常のダウンロード
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -72,46 +75,11 @@ function App() {
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (json.items && Array.isArray(json.items)) {
-          // 日付をDate型に変換
-          const fixedItems = json.items.map((item: any) => ({
-            ...item,
-            createdAt: new Date(item.createdAt),
-            updatedAt: new Date(item.updatedAt),
-          }));
-          setItems(fixedItems);
-          // localStorageにも保存
-          localStorage.setItem('postal-snap-items', JSON.stringify(fixedItems));
-        }
-        if (json.tags && Array.isArray(json.tags)) {
-          // 現在のタグを取得
-          const currentTags = getTags();
-          const importedTags = json.tags;
-
-          // タグの重複チェック
-          const duplicateTags = importedTags.filter((importedTag: any) =>
-            currentTags.some((currentTag: any) => currentTag.name === importedTag.name)
-          );
-
-          if (duplicateTags.length > 0) {
-            // 重複がある場合は確認ダイアログを表示
-            const confirmMessage = `以下のタグが重複しています。\n${duplicateTags.map((t: any) => t.name).join(', ')}\n\nインポートしたタグで上書きしますか？`;
-            if (window.confirm(confirmMessage)) {
-              // 重複を除去して新しいタグを追加
-              const uniqueTags = importedTags.filter((importedTag: any) =>
-                !currentTags.some((currentTag: any) => currentTag.name === importedTag.name)
-              );
-              setTags([...currentTags, ...uniqueTags]);
-            } else {
-              // 現在のタグを維持
-              alert('現在のタグ設定を維持します。');
-            }
-          } else {
-            // 重複がない場合は単純に追加
-            setTags([...currentTags, ...importedTags]);
-          }
-        }
-        alert('データをインポートしました。画面をリロードしてください。');
+        saveAllData(json);
+        setItems(json.items || []);
+        setGroups(json.groups || []);
+        if (json.tags) setTags(json.tags);
+        alert('データをインポートしました');
       } catch (err) {
         alert('インポートに失敗しました: ' + err);
       }
@@ -140,13 +108,24 @@ function App() {
     }));
   };
 
-  const handleAddItem = (data: {
+  const handleAddItem = (mode: 'single' | 'group') => {
+    navigateTo(mode === 'single' ? 'add' : 'add-group');
+  };
+
+  const handleAddSingleItem = (data: {
     image: string;
     ocrText: string;
     tags: string[];
     memo: string;
   }) => {
     addItem(data);
+    navigateTo('home');
+  };
+
+  const handleAddGroup = (group: PostalItemGroup) => {
+    const updatedGroups = [group, ...groups];
+    setGroups(updatedGroups);
+    saveGroups(updatedGroups);
     navigateTo('home');
   };
 
@@ -160,11 +139,20 @@ function App() {
   };
 
   const handleBulkTagRename = (oldName: string, newName: string) => {
+    // アイテムのタグ更新
     const updatedItems = items.map(item => ({
       ...item,
       tags: item.tags.map(tag => tag === oldName ? newName : tag)
     }));
     setItems(updatedItems);
+
+    // グループのタグ更新
+    const updatedGroups = groups.map(group => ({
+      ...group,
+      tags: group.tags.map(tag => tag === oldName ? newName : tag)
+    }));
+    setGroups(updatedGroups);
+    saveGroups(updatedGroups);
   };
 
   const renderScreen = () => {
@@ -177,23 +165,31 @@ function App() {
               <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1 bg-blue-500 text-white rounded">インポート</button>
               <input type="file" accept="application/json" ref={fileInputRef} onChange={handleImport} style={{ display: 'none' }} />
             </div>
-          <HomeScreen
-            items={items}
-            searchQuery={appState.searchQuery}
-            selectedTags={appState.selectedTags}
-            onSearchChange={handleSearchChange}
-            onTagToggle={handleTagToggle}
-            onAddItem={() => navigateTo('add')}
-            onItemClick={(itemId) => navigateTo('detail', itemId)}
+            <HomeScreen
+              items={items}
+              searchQuery={appState.searchQuery}
+              selectedTags={appState.selectedTags}
+              onSearchChange={handleSearchChange}
+              onTagToggle={handleTagToggle}
+              onAddItem={handleAddItem}
+              onItemClick={(itemId) => navigateTo('detail', itemId)}
               onBulkTagRename={handleBulkTagRename}
-          />
+            />
           </>
         );
 
       case 'add':
         return (
           <AddScreen
-            onSave={handleAddItem}
+            onSave={handleAddSingleItem}
+            onBack={() => navigateTo('home')}
+          />
+        );
+
+      case 'add-group':
+        return (
+          <AddGroupScreen
+            onSave={handleAddGroup}
             onBack={() => navigateTo('home')}
           />
         );
