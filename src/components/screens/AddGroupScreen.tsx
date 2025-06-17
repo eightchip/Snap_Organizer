@@ -118,110 +118,42 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       });
   }, []);
 
-  const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
-    if (!wasmReady) {
-      alert('WASMの初期化中です。少し待ってから再度お試しください。');
-      throw new Error('WASM not ready');
-    }
-
-    try {
-      // 1. 基本的な画像変換
-      const imageDataURL = await imageToDataURL(file);
-      
-      // 2. 画像のリサイズ（モバイル対応）
-      const resizedBlob = await resizeImage(file, 1000, 1000);
-      const resizedFile = new File([resizedBlob], file.name, { type: file.type });
-      const resizedDataURL = await imageToDataURL(resizedFile);
-
-      // 3. WASM処理（オプション）
-      let finalDataURL = resizedDataURL;
-      try {
-        const base64 = resizedDataURL.split(',')[1];
-        const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const processed = await preprocess_image(imageBuffer);
-        const processedBase64 = uint8ToBase64(processed);
-        finalDataURL = 'data:image/png;base64,' + processedBase64;
-      } catch (wasmError) {
-        console.warn('WASM processing skipped:', wasmError);
-        // WASM処理に失敗した場合はリサイズ済み画像を使用
-      }
-
-      // 4. メタデータ（簡易版）
-      const metadata: PhotoMetadata = {
-        dateTime: new Date().toISOString()
-      };
-
-      return {
-        dataUrl: finalDataURL,
-        metadata
-      };
-    } catch (error) {
-      console.error('Image processing error:', error);
-      throw error;
-    }
-  };
-
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!wasmReady) {
-      alert('WASMの初期化中です。少し待ってから再度お試しください。');
-      return;
-    }
-
-    if (isProcessing) {
-      console.log('Already processing images, please wait...');
-      return;
-    }
-
     setIsProcessing(true);
     setSaveError(null);
-    
+
     try {
       const files = Array.from(event.target.files || []);
-      
       if (files.length === 0) return;
-      if (files.length > 20) {
-        alert('一度に追加できる写真は20枚までです');
-        return;
-      }
 
       const processedPhotos: PhotoItem[] = [];
-
       for (const file of files) {
-        try {
-          if (!file.type.startsWith('image/')) {
-            console.warn(`Skipping non-image file: ${file.name}`);
-            continue;
-          }
-
-          const { dataUrl, metadata } = await processImage(file);
-          
-          const newPhoto: PhotoItem = {
-            id: generateId(),
-            image: dataUrl,
-            ocrText: '',
-            createdAt: new Date(metadata.dateTime || file.lastModified),
-            metadata
-          };
-
-          processedPhotos.push(newPhoto);
-        } catch (fileError: any) {
-          console.error(`Error processing file ${file.name}:`, fileError);
-          alert(`${file.name}の処理中にエラーが発生しました`);
+        if (!file.type.startsWith('image/')) continue;
+        if (file.size > 1024 * 1024) { // 1MB超はスキップ
+          alert('画像サイズが大きすぎます');
+          continue;
         }
-      }
+        // 画像リサイズのみ
+        const resizedBlob = await resizeImage(file, 800, 800);
+        const resizedFile = new File([resizedBlob], file.name, { type: file.type });
+        const resizedDataURL = await imageToDataURL(resizedFile);
 
-      if (processedPhotos.length > 0) {
-        setPhotos(prevPhotos => [...prevPhotos, ...processedPhotos]);
+        const metadata: PhotoMetadata = { dateTime: new Date().toISOString() };
+        processedPhotos.push({
+          id: generateId(),
+          image: resizedDataURL,
+          ocrText: '',
+          createdAt: new Date(metadata.dateTime),
+          metadata
+        });
       }
-
-    } catch (error: any) {
-      console.error('File selection error:', error);
-      alert('ファイルの処理中にエラーが発生しました');
+      if (processedPhotos.length > 0) setPhotos(prev => [...prev, ...processedPhotos]);
+    } catch (error) {
+      alert('画像処理中にエラーが発生しました');
+      console.error(error);
     } finally {
       setIsProcessing(false);
-      if (event.target) {
-        event.target.value = '';
-      }
+      if (event.target) event.target.value = '';
     }
   };
 
