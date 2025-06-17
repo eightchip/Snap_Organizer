@@ -221,6 +221,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       // 保存を試みる
       try {
         onSave(group);
+        setSaveError(null); // 成功時にエラーを消す
       } catch (e) {
         throw new Error('保存に失敗しました。写真のサイズを小さくするか、枚数を減らしてください。');
       }
@@ -231,6 +232,14 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       setIsSaving(false);
     }
   };
+
+  // エラーメッセージの自動消去
+  useEffect(() => {
+    if (saveError) {
+      const timer = setTimeout(() => setSaveError(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [saveError]);
 
   const removePhoto = (photoId: string) => {
     setPhotos(photos.filter(p => p.id !== photoId));

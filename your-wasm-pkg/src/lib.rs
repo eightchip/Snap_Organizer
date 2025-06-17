@@ -38,15 +38,15 @@ pub fn preprocess_image(image_data: &[u8]) -> Vec<u8> {
 
 #[wasm_bindgen]
 pub fn preprocess_image_color(image_data: &[u8]) -> Vec<u8> {
-    // 画像データを読み込む
     let img = image::load_from_memory(image_data).unwrap();
-
-    // 必要ならリサイズ（例: 最大1000x1000）
-    let img = img.thumbnail(1000, 1000);
-
-    // 画像をJPEGとしてエンコード（高圧縮・高画質）
+    let (orig_w, orig_h) = img.dimensions();
+    let max_w = 1000;
+    let max_h = 1000;
+    let scale = f32::min(max_w as f32 / orig_w as f32, max_h as f32 / orig_h as f32).min(1.0);
+    let new_w = (orig_w as f32 * scale).round() as u32;
+    let new_h = (orig_h as f32 * scale).round() as u32;
+    let img = img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3);
     let mut buf = Cursor::new(Vec::new());
     img.write_to(&mut buf, ImageFormat::Jpeg).unwrap();
-
     buf.into_inner()
 }
