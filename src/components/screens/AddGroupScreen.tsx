@@ -74,10 +74,17 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       
       // WASMで前処理
       console.log('Starting WASM preprocessing');
-      const processed = await preprocess_image(imageBuffer);
-      const processedBase64 = uint8ToBase64(processed);
-      const processedDataURL = 'data:image/png;base64,' + processedBase64;
-      console.log('WASM preprocessing complete');
+      let processedDataURL;
+      try {
+        const processed = await preprocess_image(imageBuffer);
+        const processedBase64 = uint8ToBase64(processed);
+        processedDataURL = 'data:image/png;base64,' + processedBase64;
+        console.log('WASM preprocessing complete');
+      } catch (wasmError) {
+        console.error('WASM processing failed:', wasmError);
+        // WASM処理に失敗した場合は元の画像を使用
+        processedDataURL = imageDataURL;
+      }
 
       // EXIFデータの読み取り
       const metadata: PhotoMetadata = await new Promise((resolve) => {
@@ -151,6 +158,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     }
 
     console.log('File selection triggered');
+    setIsProcessing(true);
+    setSaveError(null);
     
     try {
       const files = Array.from(event.target.files || []);
@@ -166,13 +175,13 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         return;
       }
 
-      setIsProcessing(true);
-      setSaveError(null);
+      const processedPhotos: PhotoItem[] = [];
 
       for (const file of files) {
         try {
           if (!file.type.startsWith('image/')) {
-            throw new Error(`${file.name} は画像ファイルではありません (type: ${file.type})`);
+            console.warn(`Skipping non-image file: ${file.name} (type: ${file.type})`);
+            continue;
           }
 
           console.log(`Processing file: ${file.name} (${file.size} bytes)`);
@@ -194,14 +203,20 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             metadata
           };
 
-          setPhotos(prevPhotos => [...prevPhotos, newPhoto]);
-          console.log(`Successfully added photo: ${newPhoto.id}`);
+          processedPhotos.push(newPhoto);
+          console.log(`Successfully processed photo: ${newPhoto.id}`);
 
         } catch (fileError: any) {
           console.error(`Error processing file ${file.name}:`, fileError);
           setSaveError(`${file.name}の処理中にエラーが発生しました: ${fileError.message}`);
-          return;
+          // エラーが発生しても処理を継続
         }
+      }
+
+      // 正常に処理された写真があれば追加
+      if (processedPhotos.length > 0) {
+        setPhotos(prevPhotos => [...prevPhotos, ...processedPhotos]);
+        console.log(`Added ${processedPhotos.length} photos successfully`);
       }
 
     } catch (error: any) {
