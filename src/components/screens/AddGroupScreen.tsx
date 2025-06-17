@@ -122,7 +122,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     console.log('Starting image processing for:', file.name);
     
     if (!wasmReady) {
-      const error = new Error('システムの初期化中です。少し待ってから再度お試しください。');
+      const error = new Error('WASMの初期化中です。少し待ってから再度お試しください。');
       saveErrorLog(error, 'WASM initialization');
       throw error;
     }
@@ -156,50 +156,9 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         EXIF.getData(file as any, function(this: any) {
           const exifData = EXIF.getAllTags(this);
           const metadata: PhotoMetadata = {};
-
-          try {
-            if (exifData) {
-              if (exifData.DateTime) {
-                metadata.dateTime = exifData.DateTime;
-              }
-
-              if (exifData.GPSLatitude && exifData.GPSLongitude) {
-                const convertDMSToDD = (dms: number[], dir: string) => {
-                  const degrees = dms[0];
-                  const minutes = dms[1];
-                  const seconds = dms[2];
-                  let dd = degrees + minutes/60 + seconds/3600;
-                  if (dir === 'S' || dir === 'W') dd = -dd;
-                  return dd;
-                };
-                
-                try {
-                  metadata.gpsLatitude = convertDMSToDD(
-                    exifData.GPSLatitude,
-                    exifData.GPSLatitudeRef
-                  );
-                  metadata.gpsLongitude = convertDMSToDD(
-                    exifData.GPSLongitude,
-                    exifData.GPSLongitudeRef
-                  );
-                } catch (e) {
-                  console.error('GPS conversion error:', e);
-                }
-              }
-
-              if (exifData.Make) metadata.make = exifData.Make;
-              if (exifData.Model) metadata.model = exifData.Model;
-              if (exifData.Orientation) metadata.orientation = exifData.Orientation;
-            }
-          } catch (e) {
-            console.error('EXIF parsing error:', e);
-          }
-
-          resolve(metadata);
+          resolve(metadata); // エラーが発生しても空のメタデータを返す
         });
       });
-
-      console.log('EXIF data extraction complete');
 
       return {
         dataUrl: processedDataURL,
@@ -214,7 +173,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!wasmReady) {
-      const error = new Error('システムの初期化中です。少し待ってから再度お試しください。');
+      const error = new Error('WASMの初期化中です。少し待ってから再度お試しください。');
       saveErrorLog(error, 'File selection - WASM not ready');
       setSaveError(error.message);
       return;
@@ -278,6 +237,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           console.error(`Error processing file ${file.name}:`, fileError);
           saveErrorLog(fileError, `File processing: ${file.name}`);
           setSaveError(`${file.name}の処理中にエラーが発生しました: ${fileError.message}`);
+          // エラーが発生しても処理を継続
         }
       }
 
