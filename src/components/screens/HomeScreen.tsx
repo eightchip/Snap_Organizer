@@ -130,16 +130,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // タグ追加処理
   const handleAddTag = () => {
-    setAddTagError('');
-    if (!newTagName.trim() || tags.some(t => t.name === newTagName.trim())) return;
-    if (!newTagColor || newTagColor === COLOR_PALETTE[0].color) {
-      setAddTagError('色を選択してください');
-      return;
-    }
-    setTags([...tags, { name: newTagName.trim(), color: newTagColor }]);
-    setNewTagName('');
-    setNewTagColor(COLOR_PALETTE[0].color);
-    setShowAddTag(false);
+    const newTagName = prompt('新しいタグ名を入力してください');
+    if (!newTagName) return;
+
+    const newTag = {
+      name: newTagName,
+      color: `#${Math.floor(Math.random()*16777215).toString(16)}`
+    };
+
+    const updatedTags = [...tags, newTag];
+    setTags(updatedTags);
+    localStorage.setItem('postal_tags', JSON.stringify(updatedTags));
   };
 
   // 編集開始
@@ -291,53 +292,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
 
-      {/* Tags Filter */}
-      <div className="max-w-md mx-auto px-4 py-4 sticky top-16 z-10 bg-gray-50">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-medium text-gray-700">タグフィルター</h2>
-          <button
-            onClick={() => setShowTagFilter(!showTagFilter)}
-            className={`p-2 rounded-lg transition-colors ${
-              showTagFilter ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'
-            }`}
-          >
-            <Filter className="h-5 w-5" />
-          </button>
-        </div>
-        
-        {showTagFilter && (
-          <div className="flex flex-wrap gap-2 items-center">
-            {tags.map((tag, idx) => (
-              <span key={tag.name} className="flex items-center gap-1">
-                <TagChip
-                  tag={tag.name}
-                  count={tagCounts.get(tag.name) || 0}
-                  selected={selectedTags.includes(tag.name)}
-                  onClick={() => onTagToggle(tag.name)}
-                  style={{ backgroundColor: tag.color + '22', color: tag.color }}
-                />
-                <button
-                  className="ml-1 p-1 rounded hover:bg-gray-200"
-                  onClick={() => openEditTagModal(idx)}
-                  title="編集"
-                >
-                  <Edit2 className="w-3 h-3 text-gray-500" />
-                </button>
-                <button
-                  className="ml-1 p-1 rounded hover:bg-red-100"
-                  onClick={() => handleRemoveTag(idx)}
-                  title="削除"
-                >
-                  <X className="w-3 h-3 text-red-500" />
-                </button>
-              </span>
-            ))}
+      {/* Tag Filter */}
+      <div className="bg-white shadow-sm sticky top-[72px] z-10">
+        <div className="max-w-md mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold text-gray-900">タグフィルター</h2>
             <button
-              className="px-2 py-1 bg-gray-200 rounded text-sm"
-              onClick={() => setShowAddTag(true)}
-            >＋新規タグ</button>
+              onClick={() => setShowTagFilter(!showTagFilter)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Filter className="h-5 w-5 text-gray-500" />
+            </button>
           </div>
-        )}
+
+          {showTagFilter && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {tags.map(tag => (
+                  <TagChip
+                    key={tag.name}
+                    tag={tag.name}
+                    count={tagCounts.get(tag.name) || 0}
+                    selected={selectedTags.includes(tag.name)}
+                    onClick={() => onTagToggle(tag.name)}
+                    style={{
+                      backgroundColor: tag.color + '22',
+                      color: tag.color
+                    }}
+                  />
+                ))}
+                <button
+                  onClick={handleAddTag}
+                  className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  ＋ タグ追加
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content */}
