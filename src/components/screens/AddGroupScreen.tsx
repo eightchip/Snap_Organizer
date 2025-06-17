@@ -117,6 +117,26 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       });
   }, []);
 
+  // 画像リサイズ（JPEG 70%品質、最大300x300pxでフォールバック用も用意）
+  async function resizeImageToBase64(file: File): Promise<string> {
+    return await new Promise<string>((resolve) => {
+      const img = new window.Image();
+      img.onload = function() {
+        let { width, height } = img;
+        const scale = Math.min(300 / width, 300 / height, 1);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.5)); // 画質50%
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     setIsProcessing(true);
     setSaveError(null);
@@ -133,23 +153,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           continue;
         }
 
-        // 1. 画像リサイズ（JPEG 70%品質、最大600x600pxでフォールバック用も用意）
-        const fallbackResizedDataURL = await new Promise<string>((resolve) => {
-          const img = new window.Image();
-          img.onload = function() {
-            let { width, height } = img;
-            const scale = Math.min(600 / width, 600 / height, 1);
-            width = Math.round(width * scale);
-            height = Math.round(height * scale);
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7)); // 画質70%
-          };
-          img.src = URL.createObjectURL(file);
-        });
+        // 1. 画像リサイズ（JPEG 50%品質、最大300x300pxでフォールバック用も用意）
+        const fallbackResizedDataURL = await resizeImageToBase64(file);
 
         // 2. WASMカラー圧縮（失敗時はリサイズ画像でフォールバック）
         let finalDataURL = fallbackResizedDataURL;
