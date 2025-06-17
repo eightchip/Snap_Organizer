@@ -104,8 +104,8 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
   };
 
   const handleSave = async () => {
-    if (!image || !ocrText.trim()) {
-      alert('画像とOCRテキストが必要です');
+    if (!image) {
+      alert('画像が必要です');
       return;
     }
     setIsSaving(true);
@@ -135,7 +135,7 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
     }
   };
 
-  const canSave = image && ocrText.trim();
+  const canSave = image;
 
   // 範囲指定で画像を切り出す
   const getCroppedImage = async (crop: Crop): Promise<string | null> => {
