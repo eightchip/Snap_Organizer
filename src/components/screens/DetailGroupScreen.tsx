@@ -237,7 +237,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
                 <img
                   src={imageUrlMap[photo.image] || ''}
                   alt=""
-                  className="w-full h-24 object-cover rounded"
+                  className="w-full h-24 object-contain rounded"
                 />
                 {isEditing && (
                   <button

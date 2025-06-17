@@ -69,11 +69,3 @@ export const loadAllData = (): StorageData => {
     tags: JSON.parse(localStorage.getItem('postal_tags') || '[]')
   };
 };
-
-try {
-  localStorage.setItem('__test__', '1');
-  localStorage.removeItem('__test__');
-  alert('localStorageは利用可能です');
-} catch (e) {
-  alert('localStorageが利用できません: ' + e);
-}

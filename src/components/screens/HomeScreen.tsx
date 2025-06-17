@@ -422,7 +422,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         key={photo.id}
                         src={imageUrlMap[photo.image] || ''}
                         alt=""
-                        className="w-20 h-20 object-cover rounded"
+                        className="w-20 h-20 object-contain rounded"
                         onClick={(e) => e.stopPropagation()}
                       />
                     ))}
