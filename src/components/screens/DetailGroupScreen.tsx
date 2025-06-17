@@ -5,6 +5,7 @@ import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload } from 'lucide
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
+import { loadImageBlob } from '../../utils/imageDB';
 
 interface DetailGroupScreenProps {
   group: PostalItemGroup;
@@ -28,6 +29,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
   });
+  const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
 
   // タグリストを更新
   useEffect(() => {
@@ -36,6 +38,19 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
       setAvailableTags(JSON.parse(saved));
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    (async () => {
+      const map: Record<string, string> = {};
+      for (const photo of editedPhotos) {
+        if (photo.image && !imageUrlMap[photo.image]) {
+          const blob = await loadImageBlob(photo.image);
+          if (blob) map[photo.image] = URL.createObjectURL(blob);
+        }
+      }
+      setImageUrlMap(map);
+    })();
+  }, [editedPhotos]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('ja-JP', {
@@ -220,7 +235,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
             {editedPhotos.map((photo) => (
               <div key={photo.id} className="relative">
                 <img
-                  src={photo.image}
+                  src={imageUrlMap[photo.image] || ''}
                   alt=""
                   className="w-full h-24 object-cover rounded"
                 />

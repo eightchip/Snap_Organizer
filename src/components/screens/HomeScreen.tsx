@@ -8,6 +8,7 @@ import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard 
 import { usePostalItems } from '../../hooks/usePostalItems';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
+import { loadImageBlob } from '../../utils/imageDB';
 
 interface HomeScreenProps {
   items: PostalItem[];
@@ -95,6 +96,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
+
+  const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    (async () => {
+      const map: Record<string, string> = {};
+      for (const group of groups) {
+        for (const photo of group.photos) {
+          if (photo.image && !imageUrlMap[photo.image]) {
+            const blob = await loadImageBlob(photo.image);
+            if (blob) map[photo.image] = URL.createObjectURL(blob);
+          }
+        }
+      }
+      setImageUrlMap(map);
+    })();
+  }, [groups]);
 
   const { filteredItems, tagCounts } = useMemo(() => {
     // 検索とタグでフィルタリング
@@ -403,7 +420,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     {group.photos.map(photo => (
                       <img
                         key={photo.id}
-                        src={photo.image}
+                        src={imageUrlMap[photo.image] || ''}
                         alt=""
                         className="w-20 h-20 object-cover rounded"
                         onClick={(e) => e.stopPropagation()}

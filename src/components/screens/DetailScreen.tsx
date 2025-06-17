@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PostalItem } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff } from 'lucide-react';
+import { loadImageBlob } from '../../utils/imageDB';
 
 interface DetailScreenProps {
   item: PostalItem;
@@ -31,6 +32,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
   });
+  const [imageUrl, setImageUrl] = useState<string>('');
 
   // タグリストを更新
   useEffect(() => {
@@ -39,6 +41,14 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
       setAvailableTags(JSON.parse(saved));
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    if (item.image) {
+      loadImageBlob(item.image).then(blob => {
+        if (blob) setImageUrl(URL.createObjectURL(blob));
+      });
+    }
+  }, [item.image]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('ja-JP', {
@@ -161,7 +171,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
         {/* Image */}
         <div className="bg-white rounded-xl overflow-hidden shadow-sm flex justify-center items-center" style={{ minHeight: 180, maxHeight: 320 }}>
           <img
-            src={item.image}
+            src={imageUrl || ''}
             alt="撮影画像"
             className="object-contain"
             style={{ maxWidth: '100%', maxHeight: '320px', width: 'auto', height: 'auto' }}
