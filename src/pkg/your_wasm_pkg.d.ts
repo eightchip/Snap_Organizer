@@ -1,12 +1,14 @@
 /* tslint:disable */
 /* eslint-disable */
 export function preprocess_image(image_data: Uint8Array): Uint8Array;
+export function preprocess_image_color(image_data: Uint8Array): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly preprocess_image: (a: number, b: number) => [number, number];
+  readonly preprocess_image_color: (a: number, b: number) => [number, number];
   readonly __wbindgen_export_0: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;

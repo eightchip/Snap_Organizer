@@ -35,6 +35,19 @@ export function preprocess_image(image_data) {
     return v2;
 }
 
+/**
+ * @param {Uint8Array} image_data
+ * @returns {Uint8Array}
+ */
+export function preprocess_image_color(image_data) {
+    const ptr0 = passArray8ToWasm0(image_data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.preprocess_image_color(ptr0, len0);
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+
 async function __wbg_load(module, imports) {
     if (typeof Response === 'function' && module instanceof Response) {
         if (typeof WebAssembly.instantiateStreaming === 'function') {
