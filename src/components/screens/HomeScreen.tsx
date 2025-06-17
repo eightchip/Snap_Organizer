@@ -97,45 +97,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [importError, setImportError] = useState<string | null>(null);
 
   const { filteredItems, tagCounts } = useMemo(() => {
-    // Calculate tag counts
-    const counts: Record<string, number> = {};
-    tags.forEach(tag => {
-      counts[tag.name] = items.filter(item => item.tags.includes(tag.name)).length;
+    // 検索とタグでフィルタリング
+    const filtered = items.filter(item => {
+      const matchesSearch = item.ocrText.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.memo.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => item.tags.includes(tag));
+      return matchesSearch && matchesTags;
     });
 
-    // Filter items
-    let filtered = items;
+    // タグの使用回数をカウント（単体アイテムとグループの両方）
+    const counts = new Map<string, number>();
+    
+    // 単体アイテムのタグをカウント
+    items.forEach(item => {
+      item.tags.forEach(tag => {
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      });
+    });
 
-    const normalizedQuery = normalizeOcrText(searchQuery.toLowerCase());
+    // グループのタグをカウント
+    groups.forEach(group => {
+      group.tags.forEach(tag => {
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      });
+    });
 
-    if (searchQuery) {
-      filtered = filtered.filter(item =>
-        normalizeOcrText(item.ocrText.toLowerCase()).includes(normalizedQuery) ||
-        normalizeOcrText(item.memo.toLowerCase()).includes(normalizedQuery) ||
-        item.tags.some(tag => normalizeOcrText(tag.toLowerCase()).includes(normalizedQuery))
-      );
-    }
-
-    if (selectedTags.length > 0) {
-      filtered = filtered.filter(item =>
-        selectedTags.every(tag => item.tags.includes(tag))
-      );
-    }
-
-    // 日付範囲フィルタ
-    if (startDate) {
-      const start = new Date(startDate);
-      filtered = filtered.filter(item => new Date(item.createdAt) >= start);
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      // 終了日の23:59:59まで含める
-      end.setHours(23,59,59,999);
-      filtered = filtered.filter(item => new Date(item.createdAt) <= end);
-    }
-
-    return { filteredItems: filtered, tagCounts: counts };
-  }, [items, searchQuery, selectedTags, startDate, endDate, tags]);
+    return {
+      filteredItems: filtered,
+      tagCounts: counts
+    };
+  }, [items, groups, searchQuery, selectedTags]);
 
   // タグ追加処理
   const handleAddTag = () => {
@@ -320,7 +311,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <span key={tag.name} className="flex items-center gap-1">
                 <TagChip
                   tag={tag.name}
-                  count={tagCounts[tag.name]}
+                  count={tagCounts.get(tag.name) || 0}
                   selected={selectedTags.includes(tag.name)}
                   onClick={() => onTagToggle(tag.name)}
                   style={{ backgroundColor: tag.color + '22', color: tag.color }}
