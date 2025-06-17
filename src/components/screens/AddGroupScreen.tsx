@@ -18,6 +18,54 @@ if (process.env.NODE_ENV === 'development') {
   };
 }
 
+// エラーログを保存する関数
+const saveErrorLog = (error: any, context: string) => {
+  try {
+    const errorLog = {
+      timestamp: new Date().toISOString(),
+      context,
+      error: error?.message || String(error),
+      stack: error?.stack,
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+    };
+
+    // 既存のログを取得
+    const existingLogs = JSON.parse(localStorage.getItem('error_logs') || '[]');
+    // 新しいログを追加（最大100件まで保持）
+    const updatedLogs = [errorLog, ...existingLogs].slice(0, 100);
+    localStorage.setItem('error_logs', JSON.stringify(updatedLogs));
+  } catch (e) {
+    console.error('Error saving error log:', e);
+  }
+};
+
+// エラーログを表示する関数
+const showErrorLogs = () => {
+  try {
+    const logs = JSON.parse(localStorage.getItem('error_logs') || '[]');
+    if (logs.length === 0) {
+      alert('エラーログはありません');
+      return;
+    }
+    
+    const logText = logs.map((log: any) => 
+      `[${log.timestamp}]\n` +
+      `Context: ${log.context}\n` +
+      `Error: ${log.error}\n` +
+      `Platform: ${log.platform}\n` +
+      `Browser: ${log.userAgent}\n` +
+      (log.stack ? `Stack: ${log.stack}\n` : '') +
+      '-------------------'
+    ).join('\n');
+    
+    alert(logText);
+  } catch (e) {
+    console.error('Error showing error logs:', e);
+  }
+};
+
 // Base64変換用ユーティリティ関数
 function uint8ToBase64(u8arr: Uint8Array): string {
   let CHUNK_SIZE = 0x8000; // 32KB
@@ -70,7 +118,9 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     console.log('Starting image processing for:', file.name);
     
     if (!wasmReady) {
-      throw new Error('システムの初期化中です。少し待ってから再度お試しください。');
+      const error = new Error('システムの初期化中です。少し待ってから再度お試しください。');
+      saveErrorLog(error, 'WASM initialization');
+      throw error;
     }
 
     try {
@@ -152,13 +202,16 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       };
     } catch (error) {
       console.error('Image processing error:', error);
+      saveErrorLog(error, 'Image processing');
       throw error;
     }
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!wasmReady) {
-      setSaveError('システムの初期化中です。少し待ってから再度お試しください。');
+      const error = new Error('システムの初期化中です。少し待ってから再度お試しください。');
+      saveErrorLog(error, 'File selection - WASM not ready');
+      setSaveError(error.message);
       return;
     }
 
@@ -231,6 +284,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
     } catch (error: any) {
       console.error('File selection error:', error);
+      saveErrorLog(error, 'File selection');
       setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
@@ -343,6 +397,16 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           </div>
         </div>
       </div>
+
+      {/* エラーログ表示ボタン（開発環境のみ） */}
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          onClick={showErrorLogs}
+          className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50"
+        >
+          エラーログ
+        </button>
+      )}
 
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         {/* Title Input */}
