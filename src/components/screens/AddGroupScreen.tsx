@@ -24,57 +24,75 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     return saved ? JSON.parse(saved) : [];
   });
 
+  const processImage = async (file: File): Promise<string> => {
+    // まず小さいサイズ（400x400）で試す
+    let resizedImage = await resizeImage(file, 400, 400, 0.6);
+    let imageDataURL = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(resizedImage);
+    });
+
+    // サイズチェック（500KB以上なら、さらに圧縮）
+    if (imageDataURL.length > 500 * 1024) {
+      resizedImage = await resizeImage(file, 300, 300, 0.5);
+      imageDataURL = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(resizedImage);
+      });
+    }
+
+    return imageDataURL;
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
     // ファイル数の制限
-    if (files.length > 10) {
-      alert('一度に追加できる写真は10枚までです');
+    if (files.length > 20) {
+      alert('一度に追加できる写真は20枚までです');
       return;
     }
 
     setSaveError(null);
     const newPhotos: PhotoItem[] = [];
     
-    for (const file of files) {
-      try {
-        // ファイルサイズチェック
-        if (file.size > 10 * 1024 * 1024) { // 10MB制限
-          throw new Error(`ファイル ${file.name} が大きすぎます（10MB以下にしてください）`);
+    try {
+      for (const file of files) {
+        // ファイルタイプチェック
+        if (!file.type.startsWith('image/')) {
+          throw new Error(`${file.name} は画像ファイルではありません`);
         }
 
-        // 画像をリサイズ（最大幅800px、最大高さ800px、画質60%）
-        const resizedImage = await resizeImage(file, 800, 800, 0.6);
+        const imageDataURL = await processImage(file);
         
-        // Base64形式で保存
-        const imageDataURL = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error(`ファイル ${file.name} の読み込みに失敗しました`));
-          reader.readAsDataURL(resizedImage);
-        });
+        // 1枚あたりのサイズ制限（1MB）
+        if (imageDataURL.length > 1024 * 1024) {
+          throw new Error(`${file.name} のサイズが大きすぎます。より小さい画像を選択してください。`);
+        }
 
         newPhotos.push({
           id: generateId(),
           image: imageDataURL,
           ocrText: ''
         });
-      } catch (error: any) {
-        console.error('Error processing image:', error);
-        alert(error.message || 'ファイルの処理中にエラーが発生しました');
-        return;
       }
-    }
 
-    // 合計サイズチェック
-    const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
-    if (totalSize > 50 * 1024 * 1024) { // 50MB制限
-      alert('写真の合計サイズが大きすぎます。より少ない枚数を選択するか、画質を下げてください。');
-      return;
-    }
+      // 合計サイズチェック（10MB）
+      const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
+      if (totalSize > 10 * 1024 * 1024) {
+        throw new Error('写真の合計サイズが大きすぎます。より少ない枚数を選択してください。');
+      }
 
-    setPhotos([...photos, ...newPhotos]);
+      setPhotos([...photos, ...newPhotos]);
+    } catch (error: any) {
+      console.error('Error processing images:', error);
+      setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
+    }
   };
 
   const handleTagToggle = (tag: string) => {
@@ -95,10 +113,10 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     setSaveError(null);
 
     try {
-      // 保存前に合計サイズを再チェック
+      // 保存前に最終チェック
       const totalSize = photos.reduce((sum, photo) => sum + photo.image.length, 0);
-      if (totalSize > 50 * 1024 * 1024) {
-        throw new Error('データサイズが大きすぎます。写真の枚数を減らすか、画質を下げてください。');
+      if (totalSize > 10 * 1024 * 1024) {
+        throw new Error('データサイズが大きすぎます。写真の枚数を減らすか、一部の写真を削除してください。');
       }
 
       const group: PostalItemGroup = {
@@ -111,24 +129,12 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         updatedAt: new Date()
       };
 
-      // localStorageの空き容量チェック
+      // 保存を試みる
       try {
-        const testKey = '_test_storage_';
-        let testData = '';
-        try {
-          // 1MBずつ増やしながらテスト
-          while (testData.length < totalSize) {
-            testData += new Array(1024 * 1024).fill('a').join('');
-            localStorage.setItem(testKey, testData);
-          }
-        } finally {
-          localStorage.removeItem(testKey);
-        }
+        onSave(group);
       } catch (e) {
-        throw new Error('ストレージの空き容量が不足しています。写真の枚数を減らすか、画質を下げてください。');
+        throw new Error('保存に失敗しました。写真のサイズを小さくするか、枚数を減らしてください。');
       }
-
-      onSave(group);
     } catch (error: any) {
       console.error('Save error:', error);
       setSaveError(error.message || '保存中にエラーが発生しました');
