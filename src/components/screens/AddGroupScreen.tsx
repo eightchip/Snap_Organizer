@@ -6,7 +6,6 @@ import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import EXIF from 'exif-js';
-import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
 
 // 開発環境でのみErudaを読み込む
 if (process.env.NODE_ENV === 'development') {
@@ -107,7 +106,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   };
 
   useEffect(() => {
-    init()
+    import('../../pkg/your_wasm_pkg')
       .then(() => {
         console.log('WASM initialized successfully');
         setWasmReady(true);
@@ -134,8 +133,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           continue;
         }
 
-        // 1. 画像リサイズ（JPEG 80%品質で）
-        const resizedDataURL = await new Promise<string>((resolve) => {
+        // 1. 画像リサイズ（JPEG 95%品質でフォールバック用も用意）
+        const fallbackResizedDataURL = await new Promise<string>((resolve) => {
           const img = new window.Image();
           img.onload = function() {
             let { width, height } = img;
@@ -147,22 +146,23 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
             canvas.height = height;
             const ctx = canvas.getContext('2d')!;
             ctx.drawImage(img, 0, 0, width, height);
-            // JPEG 80%品質
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
+            resolve(canvas.toDataURL('image/jpeg', 0.95)); // 高画質
           };
           img.src = URL.createObjectURL(file);
         });
 
-        // 2. WASM処理（失敗時はリサイズ画像でフォールバック）
-        let finalDataURL = resizedDataURL;
+        // 2. WASMカラー圧縮（失敗時はリサイズ画像でフォールバック）
+        let finalDataURL = fallbackResizedDataURL;
         try {
-          const base64 = resizedDataURL.split(',')[1];
+          const base64 = fallbackResizedDataURL.split(',')[1];
           const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-          const processed = await preprocess_image(imageBuffer);
+          // 動的importでpreprocess_image_colorを呼び出す
+          const wasm = await import('../../pkg/your_wasm_pkg');
+          const processed = await (wasm as any).preprocess_image_color(imageBuffer);
           const processedBase64 = uint8ToBase64(processed);
-          finalDataURL = 'data:image/png;base64,' + processedBase64;
+          finalDataURL = 'data:image/jpeg;base64,' + processedBase64;
         } catch (wasmError) {
-          console.warn('WASM processing failed, fallback to resized image:', wasmError);
+          console.warn('WASM color processing failed, fallback to resized image:', wasmError);
         }
 
         const metadata: PhotoMetadata = { dateTime: new Date().toISOString() };

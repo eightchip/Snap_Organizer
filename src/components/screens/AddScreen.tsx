@@ -7,7 +7,7 @@ import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { rustResizeImage } from '../../utils/rustImageResize';
-import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
+import init, { preprocess_image, preprocess_image_color } from '../../pkg/your_wasm_pkg';
 import { resizeImage } from '../../utils/imageResize.ts';
 
 interface AddScreenProps {
@@ -70,10 +70,10 @@ export const AddScreen: React.FC<AddScreenProps> = ({ onSave, onBack }) => {
       const imageDataURL = await imageToDataURL(file);
       const base64 = imageDataURL.split(',')[1];
       const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      // WASMで前処理（Promise対応）
-      const processed = await preprocess_image(imageBuffer);
+      // WASMでカラー圧縮
+      const processed = await preprocess_image_color(imageBuffer);
       const processedBase64 = uint8ToBase64(processed);
-      setImage('data:image/png;base64,' + processedBase64);
+      setImage('data:image/jpeg;base64,' + processedBase64);
       setOcrText('');
       setCropResults([]);
       setCrops([{ unit: '%', width: 50, height: 30, x: 25, y: 35 }]);

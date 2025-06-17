@@ -35,3 +35,18 @@ pub fn preprocess_image(image_data: &[u8]) -> Vec<u8> {
     
     buf.into_inner()
 }
+
+#[wasm_bindgen]
+pub fn preprocess_image_color(image_data: &[u8]) -> Vec<u8> {
+    // 画像データを読み込む
+    let img = image::load_from_memory(image_data).unwrap();
+
+    // 必要ならリサイズ（例: 最大1000x1000）
+    let img = img.thumbnail(1000, 1000);
+
+    // 画像をJPEGとしてエンコード（高圧縮・高画質）
+    let mut buf = Cursor::new(Vec::new());
+    img.write_to(&mut buf, ImageFormat::Jpeg).unwrap();
+
+    buf.into_inner()
+}
