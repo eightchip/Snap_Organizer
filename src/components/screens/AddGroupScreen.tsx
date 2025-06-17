@@ -134,10 +134,24 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           continue;
         }
 
-        // 1. 画像リサイズ
-        const resizedBlob = await resizeImage(file, 1000, 1000);
-        const resizedFile = new File([resizedBlob], file.name, { type: file.type });
-        const resizedDataURL = await imageToDataURL(resizedFile);
+        // 1. 画像リサイズ（JPEG 80%品質で）
+        const resizedDataURL = await new Promise<string>((resolve) => {
+          const img = new window.Image();
+          img.onload = function() {
+            let { width, height } = img;
+            const scale = Math.min(1000 / width, 1000 / height, 1);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0, width, height);
+            // JPEG 80%品質
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          img.src = URL.createObjectURL(file);
+        });
 
         // 2. WASM処理（失敗時はリサイズ画像でフォールバック）
         let finalDataURL = resizedDataURL;
