@@ -4,7 +4,7 @@ import { PostalItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
@@ -19,6 +19,8 @@ interface HomeScreenProps {
   onAddItem: (mode: 'single' | 'group') => void;
   onItemClick: (itemId: string) => void;
   onBulkTagRename: (oldName: string, newName: string) => void;
+  onImport: (data: any) => void;
+  onExport: () => void;
 }
 
 const COLOR_PALETTE = [
@@ -55,7 +57,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onTagToggle,
   onAddItem,
   onItemClick,
-  onBulkTagRename
+  onBulkTagRename,
+  onImport,
+  onExport
 }) => {
   // タグ管理（localStorage永続化）
   const [tags, setTags] = useState(() => {
@@ -82,6 +86,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [editTagColor, setEditTagColor] = useState(COLOR_PALETTE[0].color);
   const [editTagError, setEditTagError] = useState('');
   const [editTagBulk, setEditTagBulk] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'single' | 'group'>('single');
+  const [showTagFilter, setShowTagFilter] = useState(false);
 
   const { filteredItems, tagCounts } = useMemo(() => {
     // Calculate tag counts
@@ -177,6 +184,46 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  // エクスポート機能
+  const handleExport = () => {
+    const data = {
+      items,
+      groups,
+      tags,
+      version: '1.0'
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `postal_snap_export_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // インポート機能
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (!data.version || !data.items || !data.groups || !data.tags) {
+          throw new Error('Invalid file format');
+        }
+        // TODO: インポートの実装
+        alert('インポート機能は準備中です');
+      } catch (error) {
+        alert('インポートに失敗しました。ファイル形式を確認してください。');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* QRコード（テスト用: http://192.168.3.139:5173/ ） */}
@@ -191,91 +238,203 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-900 mb-4">
-            Snap Organizer
-          </h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-xl font-bold text-gray-900">
+              Snap Organizer
+            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="エクスポート"
+              >
+                <Download className="h-5 w-5 text-gray-600" />
+              </button>
+              <label className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+                <Upload className="h-5 w-5 text-gray-600" />
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
           <SearchBar
             value={searchQuery}
             onChange={onSearchChange}
             placeholder="テキストやタグで検索..."
           />
-          {/* 日付範囲検索UI */}
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-gray-600">期間検索:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              className="border rounded px-2 py-1 text-sm"
-              placeholder="開始日"
-            />
-            <span className="text-gray-500">～</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
-              className="border rounded px-2 py-1 text-sm"
-              placeholder="終了日"
-            />
-            {(startDate || endDate) && (
-              <button
-                onClick={() => { setStartDate(''); setEndDate(''); }}
-                className="p-1 text-red-500 hover:text-red-700"
-                title="期間検索をリセット"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          {/* タグなし検索チェックボックス */}
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              type="checkbox"
-              id="no-tags-search"
-              checked={selectedTags.length === 0}
-              onChange={() => onTagToggle('')}
-              className="rounded"
-            />
-            <label htmlFor="no-tags-search" className="text-sm text-gray-600">
-              タグなしのアイテムも検索
-            </label>
+
+          {/* タブ切り替え */}
+          <div className="flex border-b mt-4">
+            <button
+              className={`px-4 py-2 font-medium ${
+                activeTab === 'single'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('single')}
+            >
+              単体アイテム ({items.length})
+            </button>
+            <button
+              className={`px-4 py-2 font-medium ${
+                activeTab === 'group'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('group')}
+            >
+              グループ ({groups.length})
+            </button>
           </div>
         </div>
       </div>
 
       {/* Tags Filter */}
       <div className="max-w-md mx-auto px-4 py-4 sticky top-16 z-10 bg-gray-50">
-        <div className="flex flex-wrap gap-2 items-center">
-          {tags.map((tag, idx) => (
-            <span key={tag.name} className="flex items-center gap-1">
-              <TagChip
-                tag={tag.name}
-                count={tagCounts[tag.name]}
-                selected={selectedTags.includes(tag.name)}
-                onClick={() => onTagToggle(tag.name)}
-                style={{ backgroundColor: tag.color + '22', color: tag.color }}
-              />
-              <button
-                className="ml-1 p-1 rounded hover:bg-gray-200"
-                onClick={() => openEditTagModal(idx)}
-                title="編集"
-              >
-                <Edit2 className="w-3 h-3 text-gray-500" />
-              </button>
-              <button
-                className="ml-1 p-1 rounded hover:bg-red-100"
-                onClick={() => handleRemoveTag(idx)}
-                title="削除"
-              >
-                <X className="w-3 h-3 text-red-500" />
-              </button>
-            </span>
-          ))}
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-medium text-gray-700">タグフィルター</h2>
           <button
-            className="px-2 py-1 bg-gray-200 rounded text-sm"
-            onClick={() => setShowAddTag(true)}
-          >＋新規タグ</button>
+            onClick={() => setShowTagFilter(!showTagFilter)}
+            className={`p-2 rounded-lg transition-colors ${
+              showTagFilter ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'
+            }`}
+          >
+            <Filter className="h-5 w-5" />
+          </button>
         </div>
+        
+        {showTagFilter && (
+          <div className="flex flex-wrap gap-2 items-center">
+            {tags.map((tag, idx) => (
+              <span key={tag.name} className="flex items-center gap-1">
+                <TagChip
+                  tag={tag.name}
+                  count={tagCounts[tag.name]}
+                  selected={selectedTags.includes(tag.name)}
+                  onClick={() => onTagToggle(tag.name)}
+                  style={{ backgroundColor: tag.color + '22', color: tag.color }}
+                />
+                <button
+                  className="ml-1 p-1 rounded hover:bg-gray-200"
+                  onClick={() => openEditTagModal(idx)}
+                  title="編集"
+                >
+                  <Edit2 className="w-3 h-3 text-gray-500" />
+                </button>
+                <button
+                  className="ml-1 p-1 rounded hover:bg-red-100"
+                  onClick={() => handleRemoveTag(idx)}
+                  title="削除"
+                >
+                  <X className="w-3 h-3 text-red-500" />
+                </button>
+              </span>
+            ))}
+            <button
+              className="px-2 py-1 bg-gray-200 rounded text-sm"
+              onClick={() => setShowAddTag(true)}
+            >＋新規タグ</button>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="max-w-md mx-auto px-4 pb-20">
+        {activeTab === 'single' ? (
+          // 単体アイテム一覧
+          filteredItems.length === 0 ? (
+            <div className="text-center py-12">
+              <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 mb-2">
+                {items.length === 0 ? 'まだアイテムがありません' : '該当するアイテムが見つかりません'}
+              </p>
+              <p className="text-sm text-gray-400">
+                {items.length === 0 ? '写真を撮影してアイテムを追加しましょう' : '検索条件を変更してみてください'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredItems.map(item => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onClick={() => onItemClick(item.id)}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          // グループ一覧
+          <div className="space-y-4">
+            {groups.length === 0 ? (
+              <div className="text-center py-12">
+                <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">まだグループがありません</p>
+              </div>
+            ) : (
+              groups.map(group => (
+                <div key={group.id} className="bg-white rounded-xl p-4 shadow-sm">
+                  <h3 className="font-medium text-lg mb-2">{group.title}</h3>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {group.tags.map(tag => (
+                      <TagChip
+                        key={tag}
+                        tag={tag}
+                        selected={false}
+                        onClick={() => {}}
+                        style={{
+                          backgroundColor: (tags.find(t => t.name === tag)?.color || '#gray') + '22',
+                          color: tags.find(t => t.name === tag)?.color || '#gray'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="text-sm text-gray-600 mb-3">
+                    写真: {group.photos.length}枚
+                  </div>
+                  {group.memo && (
+                    <div className="text-sm text-gray-600 mb-3">
+                      メモ: {group.memo}
+                    </div>
+                  )}
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {group.photos.map(photo => (
+                      <img
+                        key={photo.id}
+                        src={photo.image}
+                        alt=""
+                        className="w-20 h-20 object-cover rounded"
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Add Button */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+        <button
+          onClick={() => onAddItem('group')}
+          className="p-4 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-colors"
+          title="写真グループを作成"
+        >
+          <Package className="h-6 w-6" />
+        </button>
+        <button
+          onClick={() => onAddItem('single')}
+          className="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+          title="写真を追加"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
       </div>
 
       {/* 新規タグ追加モーダル */}
@@ -371,49 +530,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-      {/* Items List */}
-      <div className="max-w-md mx-auto px-4 pb-20">
-        {filteredItems.length === 0 ? (
-          <div className="text-center py-12">
-            <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 mb-2">
-              {items.length === 0 ? 'まだアイテムがありません' : '該当するアイテムが見つかりません'}
-            </p>
-            <p className="text-sm text-gray-400">
-              {items.length === 0 ? '写真を撮影してアイテムを追加しましょう' : '検索条件を変更してみてください'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredItems.map(item => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                onClick={() => onItemClick(item.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 写真追加ボタン */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
-        <button
-          onClick={() => onAddItem('group')}
-          className="p-4 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-colors"
-          title="写真グループを作成"
-        >
-          <Package className="h-6 w-6" />
-        </button>
-        <button
-          onClick={() => onAddItem('single')}
-          className="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-colors"
-          title="写真を追加"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
-      </div>
-
       <button
         onClick={() => {
           localStorage.removeItem('postal_tags');
@@ -423,36 +539,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       >
         タグを初期状態に戻す
       </button>
-
-      <div>
-        <h2>グループ一覧</h2>
-        {groups.length === 0 && <div>グループはありません</div>}
-        {groups.map(group => (
-          <div key={group.id} style={{border: '1px solid #ccc', margin: 8, padding: 8}}>
-            <div>タイトル: {group.title}</div>
-            <div>写真枚数: {group.photos.length}</div>
-            <div>タグ: {group.tags.join(', ')}</div>
-            <div>メモ: {group.memo}</div>
-            <div>
-              {group.photos.map(photo => (
-                <img key={photo.id} src={photo.image} alt="" style={{width: 80, margin: 4}} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div>
-        <h2>単体アイテム一覧</h2>
-        {items.length === 0 && <div>アイテムはありません</div>}
-        {items.map(item => (
-          <div key={item.id} style={{border: '1px solid #ccc', margin: 8, padding: 8}}>
-            <div>タグ: {item.tags.join(', ')}</div>
-            <div>メモ: {item.memo}</div>
-            <img src={item.image} alt="" style={{width: 80, margin: 4}} />
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
