@@ -90,6 +90,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
         const newPhoto: PhotoItem = {
           id: generateId(),
           image: reader.result as string,
+          ocrText: '',
           createdAt: new Date()
         };
         setEditedPhotos(prev => [...prev, newPhoto]);

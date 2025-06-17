@@ -239,6 +239,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       const timer = setTimeout(() => setSaveError(null), 2000);
       return () => clearTimeout(timer);
     }
+    // アンマウント時にエラーをクリア
+    return () => setSaveError(null);
   }, [saveError]);
 
   const removePhoto = (photoId: string) => {
@@ -404,7 +406,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
                   <img
                     src={photo.image}
                     alt="プレビュー"
-                    className="w-full h-40 object-cover rounded"
+                    className="w-full h-40 object-contain rounded"
                   />
                   <button
                     onClick={() => removePhoto(photo.id)}
