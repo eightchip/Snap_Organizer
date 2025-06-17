@@ -8,6 +8,16 @@ import { generateId } from '../../utils/storage';
 import EXIF from 'exif-js';
 import init, { preprocess_image } from '../../pkg/your_wasm_pkg';
 
+// 開発環境でのみErudaを読み込む
+if (process.env.NODE_ENV === 'development') {
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+  document.body.appendChild(script);
+  script.onload = () => {
+    (window as any).eruda.init();
+  };
+}
+
 // Base64変換用ユーティリティ関数
 function uint8ToBase64(u8arr: Uint8Array): string {
   let CHUNK_SIZE = 0x8000; // 32KB
