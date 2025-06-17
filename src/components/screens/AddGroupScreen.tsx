@@ -20,6 +20,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [tags, setTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
@@ -138,61 +139,80 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-
-    if (files.length > 20) {
-      alert('一度に追加できる写真は20枚までです');
-      return;
-    }
-
-    setSaveError(null);
-    const newPhotos: PhotoItem[] = [];
+    console.log('File selection triggered'); // 基本的なトリガー確認
     
     try {
-      console.log('Selected files:', files.map(f => ({ name: f.name, type: f.type, size: f.size }))); // デバッグ用
+      const files = Array.from(event.target.files || []);
+      console.log('Files selected:', files.length); // ファイル数の確認
+      
+      if (files.length === 0) {
+        console.log('No files selected');
+        return;
+      }
+
+      if (files.length > 20) {
+        alert('一度に追加できる写真は20枚までです');
+        return;
+      }
+
+      setSaveError(null);
+      const newPhotos: PhotoItem[] = [];
+      
+      console.log('Processing files:', files.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        lastModified: new Date(f.lastModified).toISOString()
+      }))); // より詳細なファイル情報
 
       for (const file of files) {
-        if (!file.type.startsWith('image/')) {
-          throw new Error(`${file.name} は画像ファイルではありません`);
+        try {
+          if (!file.type.startsWith('image/')) {
+            throw new Error(`${file.name} は画像ファイルではありません (type: ${file.type})`);
+          }
+
+          console.log(`Processing file: ${file.name} (${file.size} bytes)`);
+          
+          const { dataUrl: imageDataURL, metadata } = await processImage(file);
+          console.log('Image processing complete:', {
+            fileName: file.name,
+            originalSize: file.size,
+            processedSize: imageDataURL.length,
+            hasMetadata: !!metadata,
+            metadataKeys: metadata ? Object.keys(metadata) : []
+          });
+
+          if (imageDataURL.length > 2 * 1024 * 1024) {
+            console.warn(`Large image warning: ${file.name} (${imageDataURL.length} bytes)`);
+          }
+
+          // メタデータから撮影日時を取得、なければファイルの最終更新日時を使用
+          const photoDate = metadata.dateTime 
+            ? new Date(metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'))
+            : file.lastModified 
+              ? new Date(file.lastModified) 
+              : new Date();
+
+          const newPhoto: PhotoItem = {
+            id: generateId(),
+            image: imageDataURL,
+            ocrText: '',
+            createdAt: photoDate,
+            metadata
+          };
+
+          newPhotos.push(newPhoto);
+          console.log(`Successfully added photo: ${newPhoto.id}`);
+
+        } catch (fileError: any) {
+          console.error(`Error processing file ${file.name}:`, fileError);
+          setSaveError(`${file.name}の処理中にエラーが発生しました: ${fileError.message}`);
+          return; // 1つのファイルでもエラーが発生したら処理を中止
         }
-
-        console.log('Processing file:', file.name); // デバッグ用
-        const { dataUrl: imageDataURL, metadata } = await processImage(file);
-        console.log('Processed image size:', imageDataURL.length); // デバッグ用
-        console.log('Extracted metadata:', metadata); // デバッグ用
-        
-        if (imageDataURL.length > 1024 * 1024) {
-          throw new Error(`${file.name} のサイズが大きすぎます。より小さい画像を選択してください。`);
-        }
-
-        // メタデータから撮影日時を取得、なければファイルの最終更新日時を使用
-        const photoDate = metadata.dateTime 
-          ? new Date(metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'))
-          : file.lastModified 
-            ? new Date(file.lastModified) 
-            : new Date();
-
-        const newPhoto: PhotoItem = {
-          id: generateId(),
-          image: imageDataURL,
-          ocrText: '',
-          createdAt: photoDate,
-          metadata
-        };
-
-        console.log('Created new photo object:', { 
-          id: newPhoto.id, 
-          hasMetadata: !!newPhoto.metadata,
-          createdAt: newPhoto.createdAt,
-          imageSize: newPhoto.image.length 
-        }); // デバッグ用
-
-        newPhotos.push(newPhoto);
       }
 
       const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
-      console.log('Total size of new photos:', totalSize); // デバッグ用
+      console.log('Total size of processed photos:', totalSize);
 
       if (totalSize > 10 * 1024 * 1024) {
         throw new Error('写真の合計サイズが大きすぎます。より少ない枚数を選択してください。');
@@ -200,16 +220,12 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
       setPhotos(prevPhotos => {
         const updatedPhotos = [...prevPhotos, ...newPhotos];
-        console.log('Updated photos array:', updatedPhotos.map(p => ({ 
-          id: p.id, 
-          hasMetadata: !!p.metadata,
-          createdAt: p.createdAt 
-        }))); // デバッグ用
+        console.log('Updated photos array:', updatedPhotos.length);
         return updatedPhotos;
       });
 
     } catch (error: any) {
-      console.error('Error processing images:', error);
+      console.error('File selection error:', error);
       setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
     }
 
@@ -338,18 +354,36 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         {/* Photo Upload */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">写真を追加</h2>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
-          >
-            <Upload className="h-6 w-6 text-gray-400" />
-            <span className="text-gray-600">写真を選択（複数可）</span>
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
+            >
+              <Upload className="h-6 w-6 text-gray-400" />
+              <span className="text-gray-600">ギャラリーから選択（複数可）</span>
+            </button>
+            
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
+            >
+              <Camera className="h-6 w-6 text-gray-400" />
+              <span className="text-gray-600">カメラで撮影</span>
+            </button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
             multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             onChange={handleFileSelect}
             className="hidden"
           />
