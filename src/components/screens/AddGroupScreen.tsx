@@ -129,21 +129,34 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       const processedPhotos: PhotoItem[] = [];
       for (const file of files) {
         if (!file.type.startsWith('image/')) continue;
-        if (file.size > 1024 * 1024) { // 1MB超はスキップ
+        if (file.size > 1024 * 1024 * 5) { // 5MB超はスキップ
           alert('画像サイズが大きすぎます');
           continue;
         }
-        // 画像リサイズのみ
-        const resizedBlob = await resizeImage(file, 800, 800);
+
+        // 1. 画像リサイズ
+        const resizedBlob = await resizeImage(file, 1000, 1000);
         const resizedFile = new File([resizedBlob], file.name, { type: file.type });
         const resizedDataURL = await imageToDataURL(resizedFile);
+
+        // 2. WASM処理（失敗時はリサイズ画像でフォールバック）
+        let finalDataURL = resizedDataURL;
+        try {
+          const base64 = resizedDataURL.split(',')[1];
+          const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+          const processed = await preprocess_image(imageBuffer);
+          const processedBase64 = uint8ToBase64(processed);
+          finalDataURL = 'data:image/png;base64,' + processedBase64;
+        } catch (wasmError) {
+          console.warn('WASM processing failed, fallback to resized image:', wasmError);
+        }
 
         const metadata: PhotoMetadata = { dateTime: new Date().toISOString() };
         processedPhotos.push({
           id: generateId(),
-          image: resizedDataURL,
+          image: finalDataURL,
           ocrText: '',
-          createdAt: new Date(metadata.dateTime),
+          createdAt: new Date(metadata.dateTime ?? Date.now()),
           metadata
         });
       }
