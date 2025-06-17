@@ -403,15 +403,29 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         </div>
       </div>
 
-      {/* エラーログ表示ボタン（開発環境のみ） */}
-      {process.env.NODE_ENV === 'development' && (
-        <button
-          onClick={showErrorLogs}
-          className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50"
-        >
-          エラーログ
-        </button>
-      )}
+      {/* エラーログ表示ボタン */}
+      <button
+        onClick={() => {
+          const logs = JSON.parse(localStorage.getItem('error_logs') || '[]');
+          if (logs.length === 0) {
+            alert('エラーログはありません');
+            return;
+          }
+          const logText = logs.map((log: any) => 
+            `[${new Date(log.timestamp).toLocaleString()}]\n` +
+            `Context: ${log.context}\n` +
+            `Error: ${log.error}\n` +
+            `Platform: ${log.platform}\n` +
+            `Browser: ${log.userAgent}\n` +
+            (log.stack ? `Stack: ${log.stack}\n` : '') +
+            '-------------------'
+          ).join('\n');
+          alert(logText);
+        }}
+        className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50"
+      >
+        エラーログ確認
+      </button>
 
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         {/* Title Input */}
