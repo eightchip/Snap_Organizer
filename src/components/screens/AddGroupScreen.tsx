@@ -18,29 +18,6 @@ if (process.env.NODE_ENV === 'development') {
   };
 }
 
-// エラーログを保存する関数
-const saveErrorLog = (error: any, context: string) => {
-  try {
-    const errorLog = {
-      timestamp: new Date().toISOString(),
-      context,
-      error: error?.message || String(error),
-      stack: error?.stack,
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      language: navigator.language,
-    };
-
-    // 既存のログを取得
-    const existingLogs = JSON.parse(localStorage.getItem('error_logs') || '[]');
-    // 新しいログを追加（最大100件まで保持）
-    const updatedLogs = [errorLog, ...existingLogs].slice(0, 100);
-    localStorage.setItem('error_logs', JSON.stringify(updatedLogs));
-  } catch (e) {
-    console.error('Error saving error log:', e);
-  }
-};
-
 // エラーログを表示する関数
 const showErrorLogs = () => {
   try {
@@ -95,12 +72,39 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
+  const [errorLogs, setErrorLogs] = useState<any[]>([]);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [tags, setTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // エラーログを保存する関数
+  const saveErrorLog = (error: any, context: string) => {
+    try {
+      const errorLog = {
+        timestamp: new Date().toISOString(),
+        context,
+        error: error?.message || String(error),
+        stack: error?.stack,
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+      };
+
+      // 既存のログを取得
+      const existingLogs = JSON.parse(localStorage.getItem('error_logs') || '[]');
+      // 新しいログを追加（最大100件まで保持）
+      const updatedLogs = [errorLog, ...existingLogs].slice(0, 100);
+      localStorage.setItem('error_logs', JSON.stringify(updatedLogs));
+      // 状態も更新
+      setErrorLogs(updatedLogs);
+    } catch (e) {
+      console.error('Error saving error log:', e);
+    }
+  };
 
   useEffect(() => {
     init()
@@ -142,6 +146,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         console.log('WASM preprocessing complete');
       } catch (wasmError) {
         console.error('WASM processing failed:', wasmError);
+        saveErrorLog(wasmError, 'WASM processing');
         // WASM処理に失敗した場合は元の画像を使用
         processedDataURL = imageDataURL;
       }
@@ -271,8 +276,8 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
         } catch (fileError: any) {
           console.error(`Error processing file ${file.name}:`, fileError);
+          saveErrorLog(fileError, `File processing: ${file.name}`);
           setSaveError(`${file.name}の処理中にエラーが発生しました: ${fileError.message}`);
-          // エラーが発生しても処理を継続
         }
       }
 
@@ -606,6 +611,48 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* エラーログ表示 */}
+      {errorLogs.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <button
+            onClick={() => setShowErrorDetails(!showErrorDetails)}
+            className="bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg"
+          >
+            エラー ({errorLogs.length})
+          </button>
+          
+          {showErrorDetails && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg p-4 max-w-lg w-full max-h-[80vh] overflow-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold">エラーログ</h3>
+                  <button
+                    onClick={() => setShowErrorDetails(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {errorLogs.map((log, index) => (
+                    <div key={index} className="border-b pb-2">
+                      <p className="text-sm text-gray-500">{new Date(log.timestamp).toLocaleString()}</p>
+                      <p className="font-medium">{log.context}</p>
+                      <p className="text-red-600">{log.error}</p>
+                      {log.stack && (
+                        <pre className="text-xs bg-gray-100 p-2 mt-1 overflow-x-auto">
+                          {log.stack}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
