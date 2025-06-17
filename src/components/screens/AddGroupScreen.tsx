@@ -119,63 +119,51 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   }, []);
 
   const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
-    console.log('Starting image processing for:', file.name);
-    
     if (!wasmReady) {
-      const error = new Error('WASMの初期化中です。少し待ってから再度お試しください。');
-      saveErrorLog(error, 'WASM initialization');
-      throw error;
+      alert('WASMの初期化中です。少し待ってから再度お試しください。');
+      throw new Error('WASM not ready');
     }
 
     try {
-      // 基本的な画像変換
+      // 1. 基本的な画像変換
       const imageDataURL = await imageToDataURL(file);
-      console.log('Basic image conversion complete');
-
-      // WASM処理用にbase64からUint8Arrayに変換
-      const base64 = imageDataURL.split(',')[1];
-      const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       
-      // WASMで前処理
-      console.log('Starting WASM preprocessing');
-      let processedDataURL;
+      // 2. 画像のリサイズ（モバイル対応）
+      const resizedBlob = await resizeImage(file, 1000, 1000);
+      const resizedFile = new File([resizedBlob], file.name, { type: file.type });
+      const resizedDataURL = await imageToDataURL(resizedFile);
+
+      // 3. WASM処理（オプション）
+      let finalDataURL = resizedDataURL;
       try {
+        const base64 = resizedDataURL.split(',')[1];
+        const imageBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
         const processed = await preprocess_image(imageBuffer);
         const processedBase64 = uint8ToBase64(processed);
-        processedDataURL = 'data:image/png;base64,' + processedBase64;
-        console.log('WASM preprocessing complete');
+        finalDataURL = 'data:image/png;base64,' + processedBase64;
       } catch (wasmError) {
-        console.error('WASM processing failed:', wasmError);
-        saveErrorLog(wasmError, 'WASM processing');
-        // WASM処理に失敗した場合は元の画像を使用
-        processedDataURL = imageDataURL;
+        console.warn('WASM processing skipped:', wasmError);
+        // WASM処理に失敗した場合はリサイズ済み画像を使用
       }
 
-      // EXIFデータの読み取り
-      const metadata: PhotoMetadata = await new Promise((resolve) => {
-        EXIF.getData(file as any, function(this: any) {
-          const exifData = EXIF.getAllTags(this);
-          const metadata: PhotoMetadata = {};
-          resolve(metadata); // エラーが発生しても空のメタデータを返す
-        });
-      });
+      // 4. メタデータ（簡易版）
+      const metadata: PhotoMetadata = {
+        dateTime: new Date().toISOString()
+      };
 
       return {
-        dataUrl: processedDataURL,
+        dataUrl: finalDataURL,
         metadata
       };
     } catch (error) {
       console.error('Image processing error:', error);
-      saveErrorLog(error, 'Image processing');
       throw error;
     }
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!wasmReady) {
-      const error = new Error('WASMの初期化中です。少し待ってから再度お試しください。');
-      saveErrorLog(error, 'File selection - WASM not ready');
-      setSaveError(error.message);
+      alert('WASMの初期化中です。少し待ってから再度お試しください。');
       return;
     }
 
@@ -184,19 +172,13 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       return;
     }
 
-    console.log('File selection triggered');
     setIsProcessing(true);
     setSaveError(null);
     
     try {
       const files = Array.from(event.target.files || []);
-      console.log('Files selected:', files.length);
       
-      if (files.length === 0) {
-        console.log('No files selected');
-        return;
-      }
-
+      if (files.length === 0) return;
       if (files.length > 20) {
         alert('一度に追加できる写真は20枚までです');
         return;
@@ -207,50 +189,34 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
       for (const file of files) {
         try {
           if (!file.type.startsWith('image/')) {
-            console.warn(`Skipping non-image file: ${file.name} (type: ${file.type})`);
+            console.warn(`Skipping non-image file: ${file.name}`);
             continue;
           }
 
-          console.log(`Processing file: ${file.name} (${file.size} bytes)`);
+          const { dataUrl, metadata } = await processImage(file);
           
-          const { dataUrl: imageDataURL, metadata } = await processImage(file);
-          console.log('Image processing complete');
-
-          const photoDate = metadata.dateTime 
-            ? new Date(metadata.dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'))
-            : file.lastModified 
-              ? new Date(file.lastModified) 
-              : new Date();
-
           const newPhoto: PhotoItem = {
             id: generateId(),
-            image: imageDataURL,
+            image: dataUrl,
             ocrText: '',
-            createdAt: photoDate,
+            createdAt: new Date(metadata.dateTime || file.lastModified),
             metadata
           };
 
           processedPhotos.push(newPhoto);
-          console.log(`Successfully processed photo: ${newPhoto.id}`);
-
         } catch (fileError: any) {
           console.error(`Error processing file ${file.name}:`, fileError);
-          saveErrorLog(fileError, `File processing: ${file.name}`);
-          setSaveError(`${file.name}の処理中にエラーが発生しました: ${fileError.message}`);
-          // エラーが発生しても処理を継続
+          alert(`${file.name}の処理中にエラーが発生しました`);
         }
       }
 
-      // 正常に処理された写真があれば追加
       if (processedPhotos.length > 0) {
         setPhotos(prevPhotos => [...prevPhotos, ...processedPhotos]);
-        console.log(`Added ${processedPhotos.length} photos successfully`);
       }
 
     } catch (error: any) {
       console.error('File selection error:', error);
-      saveErrorLog(error, 'File selection');
-      setSaveError(error.message || 'ファイルの処理中にエラーが発生しました');
+      alert('ファイルの処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
       if (event.target) {
