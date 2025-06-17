@@ -27,114 +27,92 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   });
 
   const processImage = async (file: File): Promise<{ dataUrl: string; metadata: PhotoMetadata }> => {
-    console.log('Starting image processing for:', file.name); // デバッグ用
-
-    // EXIFデータの読み取り
-    const metadata: PhotoMetadata = await new Promise((resolve) => {
-      EXIF.getData(file as any, function(this: any) {
-        const exifData = EXIF.getAllTags(this);
-        const metadata: PhotoMetadata = {};
-
-        try {
-          if (exifData) {
-            console.log('EXIF data found:', exifData); // デバッグ用
-
-            // 撮影日時
-            if (exifData.DateTime) {
-              metadata.dateTime = exifData.DateTime;
-            }
-
-            // GPS情報
-            if (exifData.GPSLatitude && exifData.GPSLongitude) {
-              const convertDMSToDD = (dms: number[], dir: string) => {
-                const degrees = dms[0];
-                const minutes = dms[1];
-                const seconds = dms[2];
-                let dd = degrees + minutes/60 + seconds/3600;
-                if (dir === 'S' || dir === 'W') dd = -dd;
-                return dd;
-              };
-              
-              try {
-                metadata.gpsLatitude = convertDMSToDD(
-                  exifData.GPSLatitude,
-                  exifData.GPSLatitudeRef
-                );
-                metadata.gpsLongitude = convertDMSToDD(
-                  exifData.GPSLongitude,
-                  exifData.GPSLongitudeRef
-                );
-              } catch (e) {
-                console.error('GPS conversion error:', e);
-              }
-            }
-
-            // カメラ情報
-            if (exifData.Make) metadata.make = exifData.Make;
-            if (exifData.Model) metadata.model = exifData.Model;
-            
-            // 画像の向き
-            if (exifData.Orientation) metadata.orientation = exifData.Orientation;
-          } else {
-            console.log('No EXIF data found'); // デバッグ用
-          }
-        } catch (e) {
-          console.error('EXIF parsing error:', e);
-        }
-
-        console.log('Processed metadata:', metadata); // デバッグ用
-        resolve(metadata);
-      });
-    });
-
-    // 画像のリサイズ処理
+    console.log('Starting image processing for:', file.name);
+    
     try {
-      console.log('Starting image resize. Original size:', file.size); // デバッグ用
+      // まず基本的な画像の読み込みを試みる
+      const imageDataURL = await imageToDataURL(file);
+      console.log('Basic image conversion complete');
 
-      // 初期リサイズ
-      let resizedImage = await resizeImage(file, 800, 800, 0.8);
-      console.log('First resize complete. New size:', resizedImage.size); // デバッグ用
+      // 画像のリサイズ処理
+      const resizedImage = await resizeImage(file, 800, 800, 0.8);
+      console.log('Image resize complete. New size:', resizedImage.size);
 
-      let imageDataURL = await new Promise<string>((resolve, reject) => {
+      // リサイズした画像をDataURLに変換
+      const resizedDataURL = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = (e) => {
-          console.error('FileReader error:', e); // デバッグ用
-          reject(e);
+          console.error('FileReader error:', e);
+          reject(new Error('画像の読み込みに失敗しました'));
         };
         reader.readAsDataURL(resizedImage);
       });
 
-      console.log('DataURL length after first resize:', imageDataURL.length); // デバッグ用
+      console.log('Resized image conversion complete');
 
-      // サイズが大きすぎる場合は更に圧縮
-      if (imageDataURL.length > 1024 * 1024) {
-        console.log('Image still too large, performing second resize'); // デバッグ用
-        resizedImage = await resizeImage(file, 600, 600, 0.7);
-        console.log('Second resize complete. New size:', resizedImage.size); // デバッグ用
+      // EXIFデータの読み取り
+      const metadata: PhotoMetadata = await new Promise((resolve) => {
+        EXIF.getData(file as any, function(this: any) {
+          const exifData = EXIF.getAllTags(this);
+          const metadata: PhotoMetadata = {};
 
-        imageDataURL = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (e) => {
-            console.error('FileReader error:', e); // デバッグ用
-            reject(e);
-          };
-          reader.readAsDataURL(resizedImage);
+          try {
+            if (exifData) {
+              // 撮影日時
+              if (exifData.DateTime) {
+                metadata.dateTime = exifData.DateTime;
+              }
+
+              // GPS情報
+              if (exifData.GPSLatitude && exifData.GPSLongitude) {
+                const convertDMSToDD = (dms: number[], dir: string) => {
+                  const degrees = dms[0];
+                  const minutes = dms[1];
+                  const seconds = dms[2];
+                  let dd = degrees + minutes/60 + seconds/3600;
+                  if (dir === 'S' || dir === 'W') dd = -dd;
+                  return dd;
+                };
+                
+                try {
+                  metadata.gpsLatitude = convertDMSToDD(
+                    exifData.GPSLatitude,
+                    exifData.GPSLatitudeRef
+                  );
+                  metadata.gpsLongitude = convertDMSToDD(
+                    exifData.GPSLongitude,
+                    exifData.GPSLongitudeRef
+                  );
+                } catch (e) {
+                  console.error('GPS conversion error:', e);
+                }
+              }
+
+              // カメラ情報
+              if (exifData.Make) metadata.make = exifData.Make;
+              if (exifData.Model) metadata.model = exifData.Model;
+              
+              // 画像の向き
+              if (exifData.Orientation) metadata.orientation = exifData.Orientation;
+            }
+          } catch (e) {
+            console.error('EXIF parsing error:', e);
+          }
+
+          resolve(metadata);
         });
+      });
 
-        console.log('DataURL length after second resize:', imageDataURL.length); // デバッグ用
-      }
+      console.log('EXIF data extraction complete');
 
-      // 最終チェック
-      if (imageDataURL.length > 2 * 1024 * 1024) {
-        console.warn('Warning: Final image size still large:', imageDataURL.length); // デバッグ用
-      }
-
-      return { dataUrl: imageDataURL, metadata };
-    } catch (e) {
-      console.error('Image resize error:', e);
-      throw new Error(`画像の処理に失敗しました: ${e.message}`);
+      return {
+        dataUrl: resizedDataURL,
+        metadata
+      };
+    } catch (error) {
+      console.error('Image processing error:', error);
+      throw new Error('画像の処理中にエラーが発生しました: ' + (error as Error).message);
     }
   };
 
