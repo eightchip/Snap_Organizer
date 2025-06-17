@@ -1,4 +1,9 @@
-export const resizeImage = (file: File, maxWidth: number, maxHeight: number): Promise<File> => {
+export const resizeImage = (
+  file: File,
+  maxWidth: number,
+  maxHeight: number,
+  quality: number = 0.8
+): Promise<File> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -18,7 +23,7 @@ export const resizeImage = (file: File, maxWidth: number, maxHeight: number): Pr
           }
         },
         'image/jpeg',
-        0.8
+        quality
       );
     };
     img.src = URL.createObjectURL(file);

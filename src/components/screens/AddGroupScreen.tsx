@@ -16,6 +16,7 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
   const [title, setTitle] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [memo, setMemo] = useState('');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [tags, setTags] = useState(() => {
@@ -27,15 +28,30 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
+    // ファイル数の制限
+    if (files.length > 10) {
+      alert('一度に追加できる写真は10枚までです');
+      return;
+    }
+
+    setSaveError(null);
     const newPhotos: PhotoItem[] = [];
+    
     for (const file of files) {
       try {
-        // 画像をリサイズ（最大幅1000px、最大高さ1000px、画質80%）
-        const resizedImage = await resizeImage(file, 1000, 1000);
+        // ファイルサイズチェック
+        if (file.size > 10 * 1024 * 1024) { // 10MB制限
+          throw new Error(`ファイル ${file.name} が大きすぎます（10MB以下にしてください）`);
+        }
+
+        // 画像をリサイズ（最大幅800px、最大高さ800px、画質60%）
+        const resizedImage = await resizeImage(file, 800, 800, 0.6);
+        
         // Base64形式で保存
-        const imageDataURL = await new Promise<string>((resolve) => {
+        const imageDataURL = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error(`ファイル ${file.name} の読み込みに失敗しました`));
           reader.readAsDataURL(resizedImage);
         });
 
@@ -44,9 +60,18 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           image: imageDataURL,
           ocrText: ''
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error processing image:', error);
+        alert(error.message || 'ファイルの処理中にエラーが発生しました');
+        return;
       }
+    }
+
+    // 合計サイズチェック
+    const totalSize = newPhotos.reduce((sum, photo) => sum + photo.image.length, 0);
+    if (totalSize > 50 * 1024 * 1024) { // 50MB制限
+      alert('写真の合計サイズが大きすぎます。より少ない枚数を選択するか、画質を下げてください。');
+      return;
     }
 
     setPhotos([...photos, ...newPhotos]);
@@ -62,12 +87,20 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
 
   const handleSave = async () => {
     if (photos.length === 0) {
-      alert('少なくとも1枚の写真が必要です');
+      setSaveError('少なくとも1枚の写真が必要です');
       return;
     }
-    
+
     setIsSaving(true);
+    setSaveError(null);
+
     try {
+      // 保存前に合計サイズを再チェック
+      const totalSize = photos.reduce((sum, photo) => sum + photo.image.length, 0);
+      if (totalSize > 50 * 1024 * 1024) {
+        throw new Error('データサイズが大きすぎます。写真の枚数を減らすか、画質を下げてください。');
+      }
+
       const group: PostalItemGroup = {
         id: generateId(),
         title: title || `写真グループ ${new Date().toLocaleDateString()}`,
@@ -77,9 +110,28 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
         createdAt: new Date(),
         updatedAt: new Date()
       };
+
+      // localStorageの空き容量チェック
+      try {
+        const testKey = '_test_storage_';
+        let testData = '';
+        try {
+          // 1MBずつ増やしながらテスト
+          while (testData.length < totalSize) {
+            testData += new Array(1024 * 1024).fill('a').join('');
+            localStorage.setItem(testKey, testData);
+          }
+        } finally {
+          localStorage.removeItem(testKey);
+        }
+      } catch (e) {
+        throw new Error('ストレージの空き容量が不足しています。写真の枚数を減らすか、画質を下げてください。');
+      }
+
       onSave(group);
-    } catch (error) {
-      alert('保存中にエラーが発生しました');
+    } catch (error: any) {
+      console.error('Save error:', error);
+      setSaveError(error.message || '保存中にエラーが発生しました');
     } finally {
       setIsSaving(false);
     }
@@ -196,6 +248,23 @@ export const AddGroupScreen: React.FC<AddGroupScreenProps> = ({ onSave, onBack }
           />
         </div>
       </div>
+
+      {/* エラーメッセージ表示 */}
+      {saveError && (
+        <div className="fixed top-16 left-0 right-0 mx-auto max-w-md bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
+          <p>{saveError}</p>
+        </div>
+      )}
+
+      {/* 保存中インジケータ */}
+      {isSaving && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-2 text-sm text-gray-600">保存中...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }; 
