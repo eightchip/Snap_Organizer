@@ -1,6 +1,6 @@
 import React from 'react';
 import { useMemo, useState, useEffect } from 'react';
-import { PostalItem } from '../../types';
+import { PostalItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
@@ -11,6 +11,7 @@ import { normalizeOcrText } from '../../utils/normalizeOcrText';
 
 interface HomeScreenProps {
   items: PostalItem[];
+  groups: PostalItemGroup[];
   searchQuery: string;
   selectedTags: string[];
   onSearchChange: (query: string) => void;
@@ -47,6 +48,7 @@ const DEFAULT_TAGS = COLOR_PALETTE.slice(0, 3);
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   items,
+  groups,
   searchQuery,
   selectedTags,
   onSearchChange,

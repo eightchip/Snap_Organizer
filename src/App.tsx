@@ -8,14 +8,27 @@ import { DetailScreen } from './components/screens/DetailScreen';
 import { loadGroups, saveGroups, loadAllData, saveAllData } from './utils/storage';
 
 function App() {
-  const { items, addItem, updateItem, deleteItem, getItem, setItems } = usePostalItems();
-  const [groups, setGroups] = useState<PostalItemGroup[]>([]);
+  const {
+    items,
+    groups,
+    addItem,
+    addGroup,
+    updateItem,
+    deleteItem,
+    getItem,
+    setItems,
+    setGroups,
+    clearStorage
+  } = usePostalItems();
+
   const [appState, setAppState] = useState<AppState>({
     currentScreen: 'home',
     selectedItemId: null,
     searchQuery: '',
     selectedTags: []
   });
+
+  const [error, setError] = useState<string | null>(null);
 
   // グループデータの読み込み
   useEffect(() => {
@@ -68,23 +81,50 @@ function App() {
   };
 
   // インポート
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        saveAllData(json);
-        setItems(json.items || []);
-        setGroups(json.groups || []);
-        if (json.tags) setTags(json.tags);
-        alert('データをインポートしました');
-      } catch (err) {
-        alert('インポートに失敗しました: ' + err);
-      }
-    };
-    reader.readAsText(file);
+
+    setError(null);
+    try {
+      // 一旦ストレージをクリア
+      await clearStorage();
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const json = JSON.parse(event.target?.result as string);
+          
+          // データの検証
+          if (!json.items && !json.groups && !json.tags) {
+            throw new Error('インポートするデータが見つかりません');
+          }
+
+          // 日付の修正
+          const fixItems = (items: any[]) => items.map(item => ({
+            ...item,
+            createdAt: new Date(item.createdAt),
+            updatedAt: new Date(item.updatedAt)
+          }));
+
+          if (json.items) setItems(fixItems(json.items));
+          if (json.groups) setGroups(fixItems(json.groups));
+          if (json.tags) localStorage.setItem('postal_tags', JSON.stringify(json.tags));
+
+          alert('データをインポートしました');
+        } catch (error: any) {
+          setError(error.message || 'インポートに失敗しました');
+          console.error('Import error:', error);
+        }
+      };
+      reader.onerror = () => {
+        setError('ファイルの読み込みに失敗しました');
+      };
+      reader.readAsText(file);
+    } catch (error: any) {
+      setError(error.message || 'インポート処理に失敗しました');
+      console.error('Import error:', error);
+    }
   };
 
   const navigateTo = (screen: Screen, itemId?: string) => {
@@ -112,21 +152,31 @@ function App() {
     navigateTo(mode === 'single' ? 'add' : 'add-group');
   };
 
-  const handleAddSingleItem = (data: {
+  const handleAddSingleItem = async (data: {
     image: string;
     ocrText: string;
     tags: string[];
     memo: string;
   }) => {
-    addItem(data);
-    navigateTo('home');
+    setError(null);
+    try {
+      await addItem(data);
+      navigateTo('home');
+    } catch (error: any) {
+      setError(error.message || '保存に失敗しました');
+      console.error('Save error:', error);
+    }
   };
 
-  const handleAddGroup = (group: PostalItemGroup) => {
-    const updatedGroups = [group, ...groups];
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-    navigateTo('home');
+  const handleAddGroup = async (group: PostalItemGroup) => {
+    setError(null);
+    try {
+      await addGroup(group);
+      navigateTo('home');
+    } catch (error: any) {
+      setError(error.message || '保存に失敗しました');
+      console.error('Save error:', error);
+    }
   };
 
   const handleUpdateItem = (itemId: string, updates: any) => {
@@ -165,8 +215,14 @@ function App() {
               <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1 bg-blue-500 text-white rounded">インポート</button>
               <input type="file" accept="application/json" ref={fileInputRef} onChange={handleImport} style={{ display: 'none' }} />
             </div>
+            {error && (
+              <div className="mx-auto max-w-md bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <p>{error}</p>
+              </div>
+            )}
             <HomeScreen
               items={items}
+              groups={groups}
               searchQuery={appState.searchQuery}
               selectedTags={appState.selectedTags}
               onSearchChange={handleSearchChange}
