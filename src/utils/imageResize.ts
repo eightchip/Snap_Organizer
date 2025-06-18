@@ -7,75 +7,49 @@ declare module '../../your-wasm-pkg/pkg' {
 }
 
 let wasmInitialized = false;
+const PROCESSING_TIMEOUT = 30000; // 30秒タイムアウト
 
-const initializeWasm = async () => {
+async function initializeWasm() {
   if (!wasmInitialized) {
     await init();
     wasmInitialized = true;
   }
-};
+}
 
-export const resizeImage = async (
-  file: File,
-  maxWidth: number,
-  maxHeight: number,
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    setTimeout(() => reject(new Error('Image processing timed out')), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]);
+}
+
+export async function resizeImage(
+  base64Image: string,
+  maxWidth: number = 800,
+  maxHeight: number = 800,
   quality: number = 0.8
-): Promise<Blob> => {
-  await initializeWasm();
+): Promise<string> {
+  try {
+    await initializeWasm();
+    return await withTimeout(
+      Promise.resolve(resize_image(base64Image, maxWidth, maxHeight, quality * 100)),
+      PROCESSING_TIMEOUT
+    );
+  } catch (error) {
+    console.error('Image resize error:', error);
+    throw new Error('Failed to resize image: ' + (error as Error).message);
+  }
+}
 
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const base64Image = e.target?.result as string;
-        const resizedBase64 = await resize_image(base64Image, maxWidth, maxHeight, quality * 100);
-        
-        // Base64からBlobに変換
-        const byteString = atob(resizedBase64.split(',')[1]);
-        const mimeString = resizedBase64.split(',')[0].split(':')[1].split(';')[0];
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        
-        for (let i = 0; i < byteString.length; i++) {
-          ia[i] = byteString.charCodeAt(i);
-        }
-        
-        resolve(new Blob([ab], { type: mimeString }));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-};
-
-export const preprocessImageForOcr = async (file: File): Promise<Blob> => {
-  await initializeWasm();
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const base64Image = e.target?.result as string;
-        const processedBase64 = await preprocess_image_for_ocr(base64Image);
-        
-        // Base64からBlobに変換
-        const byteString = atob(processedBase64.split(',')[1]);
-        const mimeString = processedBase64.split(',')[0].split(':')[1].split(';')[0];
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        
-        for (let i = 0; i < byteString.length; i++) {
-          ia[i] = byteString.charCodeAt(i);
-        }
-        
-        resolve(new Blob([ab], { type: mimeString }));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-}; 
+export async function preprocessImageForOcr(base64Image: string): Promise<string> {
+  try {
+    await initializeWasm();
+    return await withTimeout(
+      Promise.resolve(preprocess_image_for_ocr(base64Image)),
+      PROCESSING_TIMEOUT
+    );
+  } catch (error) {
+    console.error('Image preprocessing error:', error);
+    throw new Error('Failed to preprocess image: ' + (error as Error).message);
+  }
+} 

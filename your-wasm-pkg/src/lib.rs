@@ -1,7 +1,26 @@
 use wasm_bindgen::prelude::*;
-use image::{ImageBuffer, GenericImageView};
+use image::{ImageBuffer, GenericImageView, DynamicImage};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use std::io::Cursor;
+
+const MAX_IMAGE_SIZE: u32 = 4096;
+
+fn scale_dimensions(width: u32, height: u32, max_size: u32) -> (u32, u32) {
+    if width <= max_size && height <= max_size {
+        return (width, height);
+    }
+    
+    let aspect_ratio = width as f32 / height as f32;
+    if width > height {
+        let new_width = max_size;
+        let new_height = (new_width as f32 / aspect_ratio) as u32;
+        (new_width, new_height)
+    } else {
+        let new_height = max_size;
+        let new_width = (new_height as f32 * aspect_ratio) as u32;
+        (new_width, new_height)
+    }
+}
 
 #[wasm_bindgen]
 pub fn resize_image(
@@ -23,22 +42,17 @@ pub fn resize_image(
     let img = image::load_from_memory(&image_data)
         .map_err(|e| JsValue::from_str(&format!("Image decode error: {}", e)))?;
 
-    // アスペクト比を維持したリサイズ計算
+    // 大きすぎる画像のサイズを制限
     let (width, height) = img.dimensions();
-    let aspect_ratio = width as f32 / height as f32;
-    let mut new_width = width;
-    let mut new_height = height;
+    let (width, height) = scale_dimensions(width, height, MAX_IMAGE_SIZE);
+    let img = if width != img.width() || height != img.height() {
+        img.resize(width, height, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
 
-    if width > max_width {
-        new_width = max_width;
-        new_height = (new_width as f32 / aspect_ratio) as u32;
-    }
-    if new_height > max_height {
-        new_height = max_height;
-        new_width = (new_height as f32 * aspect_ratio) as u32;
-    }
-
-    // リサイズ実行
+    // ユーザー指定のサイズにリサイズ
+    let (new_width, new_height) = scale_dimensions(width, height, max_width.max(max_height));
     let resized = img.resize(new_width, new_height, image::imageops::FilterType::Lanczos3);
 
     // JPEG形式でエンコード
@@ -71,21 +85,40 @@ pub fn preprocess_image_for_ocr(base64_image: &str) -> Result<String, JsValue> {
     let img = image::load_from_memory(&image_data)
         .map_err(|e| JsValue::from_str(&format!("Image decode error: {}", e)))?;
 
-    // グレースケール変換
-    let gray_img = img.to_luma8();
+    // 大きすぎる画像のサイズを制限
+    let (width, height) = img.dimensions();
+    let (width, height) = scale_dimensions(width, height, MAX_IMAGE_SIZE);
+    let img = if width != img.width() || height != img.height() {
+        img.resize(width, height, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
 
-    // コントラスト強調
-    let contrast_img = ImageBuffer::from_fn(gray_img.width(), gray_img.height(), |x, y| {
-        let pixel = gray_img.get_pixel(x, y).0[0] as f32;
-        let normalized = (pixel - 128.0) * 1.5 + 128.0;
-        let clamped = normalized.max(0.0).min(255.0) as u8;
-        image::Luma([clamped])
-    });
+    // OCR前処理
+    let mut processed = DynamicImage::ImageLuma8(img.to_luma8());
 
-    // JPEG形式でエンコード
+    // コントラスト自動調整
+    processed = DynamicImage::ImageLuma8(
+        ImageBuffer::from_fn(processed.width(), processed.height(), |x, y| {
+            let pixel = processed.get_pixel(x, y).0[0] as f32;
+            let normalized = (pixel - 128.0) * 1.5 + 128.0;
+            let clamped = normalized.max(0.0).min(255.0) as u8;
+            image::Luma([clamped])
+        })
+    );
+
+    // シャープネス強調
+    let kernel = [
+        -1.0, -1.0, -1.0,
+        -1.0,  9.0, -1.0,
+        -1.0, -1.0, -1.0,
+    ];
+    let processed = processed.filter3x3(&kernel);
+
+    // JPEG形式でエンコード（高品質）
     let mut jpeg_data = Vec::new();
     let mut cursor = Cursor::new(&mut jpeg_data);
-    contrast_img.write_to(&mut cursor, image::ImageOutputFormat::Jpeg(90))
+    processed.write_to(&mut cursor, image::ImageOutputFormat::Jpeg(95))
         .map_err(|e| JsValue::from_str(&format!("JPEG encode error: {}", e)))?;
 
     // Base64エンコード
