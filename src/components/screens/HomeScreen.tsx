@@ -4,7 +4,7 @@ import { PostalItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2 } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
@@ -17,7 +17,7 @@ interface HomeScreenProps {
   selectedTags: string[];
   onSearchChange: (query: string) => void;
   onTagToggle: (tag: string) => void;
-  onAddItem: (mode: 'single' | 'group') => void;
+  onAddItem: (mode: 'unified') => void;
   onItemClick: (itemId: string) => void;
   onGroupClick: (groupId: string) => void;
   onBulkTagRename: (oldName: string, newName: string) => void;
@@ -90,7 +90,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [editTagError, setEditTagError] = useState('');
   const [editTagBulk, setEditTagBulk] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'single' | 'group'>('single');
   const [showTagFilter, setShowTagFilter] = useState(false);
 
   const [showImportModal, setShowImportModal] = useState(false);
@@ -99,40 +98,90 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
   useEffect(() => {
-    (async () => {
-      const map: Record<string, string> = {};
+    const loadImages = async () => {
+      const newMap: Record<string, string> = {};
+      const processedImages = new Set<string>();
+
+      // Helper function to load and cache image
+      const loadAndCacheImage = async (imageId: string) => {
+        if (!processedImages.has(imageId) && !imageUrlMap[imageId]) {
+          processedImages.add(imageId);
+          const blob = await loadImageBlob(imageId);
+          if (blob) {
+            newMap[imageId] = URL.createObjectURL(blob);
+          }
+        }
+      };
+
+      // Process single items
+      for (const item of items) {
+        if (item.image) {
+          await loadAndCacheImage(item.image);
+        }
+      }
+
+      // Process group photos
       for (const group of groups) {
         for (const photo of group.photos) {
-          if (photo.image && !imageUrlMap[photo.image]) {
-            const blob = await loadImageBlob(photo.image);
-            if (blob) map[photo.image] = URL.createObjectURL(blob);
+          if (photo.image) {
+            await loadAndCacheImage(photo.image);
           }
         }
       }
-      setImageUrlMap(map);
-    })();
-  }, [groups]);
 
-  const { filteredItems, tagCounts } = useMemo(() => {
-    // 検索とタグでフィルタリング
-    const filtered = items.filter(item => {
+      if (Object.keys(newMap).length > 0) {
+        setImageUrlMap(prev => ({ ...prev, ...newMap }));
+      }
+    };
+
+    loadImages();
+
+    // Cleanup function
+    return () => {
+      Object.values(imageUrlMap).forEach(url => {
+        URL.revokeObjectURL(url);
+      });
+    };
+  }, [items, groups]);
+
+  // Combine items and groups into a single list for display
+  const { filteredItems, filteredGroups, tagCounts } = useMemo(() => {
+    // Filter items
+    const filteredItems = items.filter(item => {
       const matchesSearch = item.ocrText.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.memo.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => item.tags.includes(tag));
-      return matchesSearch && matchesTags;
+      
+      // 日付フィルタリング
+      const itemDate = new Date(item.createdAt);
+      const matchesDateRange = (!startDate || itemDate >= new Date(startDate)) &&
+        (!endDate || itemDate <= new Date(endDate + 'T23:59:59'));
+      
+      return matchesSearch && matchesTags && matchesDateRange;
     });
 
-    // タグの使用回数をカウント（単体アイテムとグループの両方）
+    // Filter groups
+    const filteredGroups = groups.filter(group => {
+      const matchesSearch = group.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        group.memo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        group.photos.some(photo => photo.ocrText.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => group.tags.includes(tag));
+      
+      // 日付フィルタリング
+      const groupDate = new Date(group.createdAt);
+      const matchesDateRange = (!startDate || groupDate >= new Date(startDate)) &&
+        (!endDate || groupDate <= new Date(endDate + 'T23:59:59'));
+      
+      return matchesSearch && matchesTags && matchesDateRange;
+    });
+
+    // Count tags from both items and groups
     const counts = new Map<string, number>();
-    
-    // 単体アイテムのタグをカウント
     items.forEach(item => {
       item.tags.forEach(tag => {
         counts.set(tag, (counts.get(tag) || 0) + 1);
       });
     });
-
-    // グループのタグをカウント
     groups.forEach(group => {
       group.tags.forEach(tag => {
         counts.set(tag, (counts.get(tag) || 0) + 1);
@@ -140,10 +189,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     });
 
     return {
-      filteredItems: filtered,
+      filteredItems,
+      filteredGroups,
       tagCounts: counts
     };
-  }, [items, groups, searchQuery, selectedTags]);
+  }, [items, groups, searchQuery, selectedTags, startDate, endDate]);
 
   // タグ追加処理
   const handleAddTag = () => {
@@ -241,311 +291,164 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  // 日付フィルターのクリア
+  const clearDateFilter = () => {
+    setStartDate('');
+    setEndDate('');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* QRコード（テスト用: http://192.168.3.139:5173/ ） */}
-      <div style={{ position: 'absolute', left: 8, top: 8, width: 40, height: 60, display: 'flex', alignItems: 'center' }}>
-        <QRcode
-          value="https://snap-organizer.vercel.app/"
-          size={40}
-          style={{ height: 60, width: 40, objectFit: 'contain' }}
-        />
-      </div>
-
-      {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
+      {/* App Header */}
+      <div className="bg-white shadow-sm">
         <div className="max-w-md mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold text-gray-900">
-              Snap Organizer
-            </h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleExport}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="エクスポート"
-              >
-                <Download className="h-5 w-5 text-gray-600" />
-              </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <QRcode
+                value="https://snap-organizer.vercel.app/"
+                size={40}
+                style={{ height: 40, width: 40 }}
+              />
+              <h1 className="text-xl font-bold">Snap Organizer</h1>
+            </div>
+            <div className="flex gap-2">
               <button
                 onClick={() => setShowImportModal(true)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="インポート"
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="データをインポート"
               >
-                <Upload className="h-5 w-5 text-gray-600" />
+                <Upload className="h-5 w-5" />
+              </button>
+              <button
+                onClick={handleExport}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="全体をエクスポート"
+              >
+                <Download className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search, Share and Add Button */}
+      <div className="sticky top-0 bg-white shadow-sm z-10">
+        <div className="max-w-md mx-auto px-4">
+          {/* Search Bar Row */}
+          <div className="flex items-center gap-2 py-4">
+            <div className="flex-1">
+              <SearchBar
+                value={searchQuery}
+                onChange={onSearchChange}
+                placeholder="テキストやタグで検索..."
+              />
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleExport}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="全体をエクスポート"
+              >
+                <Share2 className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => onAddItem('unified')}
+                className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors shadow-md"
+                title="写真を追加"
+              >
+                <Plus className="h-6 w-6" />
               </button>
             </div>
           </div>
 
-          <SearchBar
-            value={searchQuery}
-            onChange={onSearchChange}
-            placeholder="テキストやタグで検索..."
-          />
-
-          {/* タブ切り替え */}
-          <div className="flex border-b mt-4">
-            <button
-              className={`px-4 py-2 font-medium ${
-                activeTab === 'single'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              onClick={() => setActiveTab('single')}
-            >
-              単体アイテム ({items.length})
-            </button>
-            <button
-              className={`px-4 py-2 font-medium ${
-                activeTab === 'group'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              onClick={() => setActiveTab('group')}
-            >
-              グループ ({groups.length})
-            </button>
+          {/* Calendar Row */}
+          <div className="flex items-center gap-2 pb-4">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-gray-400 flex-shrink-0">～</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              min={startDate}
+              className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {(startDate || endDate) && (
+              <button
+                onClick={clearDateFilter}
+                className="text-sm text-blue-500 hover:text-blue-600 px-2 flex-shrink-0"
+              >
+                クリア
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Tag Filter */}
-      <div className="bg-white shadow-sm sticky top-[72px] z-10">
-        <div className="max-w-md mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-gray-900">タグフィルター</h2>
+      <div className="max-w-md mx-auto px-4 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">タグフィルター</h2>
             <button
               onClick={() => setShowTagFilter(!showTagFilter)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <Filter className="h-5 w-5 text-gray-500" />
+              <Filter className="h-4 w-4" />
             </button>
           </div>
-
-          {showTagFilter && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {tags.map(tag => (
-                  <TagChip
-                    key={tag.name}
-                    tag={tag.name}
-                    count={tagCounts.get(tag.name) || 0}
-                    selected={selectedTags.includes(tag.name)}
-                    onClick={() => onTagToggle(tag.name)}
-                    style={{
-                      backgroundColor: tag.color + '22',
-                      color: tag.color
-                    }}
-                  />
-                ))}
-                <button
-                  onClick={handleAddTag}
-                  className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                >
-                  ＋ タグ追加
-                </button>
-              </div>
-            </div>
-          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {tags.map(tag => (
+            <TagChip
+              key={tag.name}
+              tag={tag.name}
+              selected={selectedTags.includes(tag.name)}
+              onClick={() => onTagToggle(tag.name)}
+              style={{ backgroundColor: tag.color + '22', color: tag.color }}
+              count={tagCounts.get(tag.name) || 0}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-md mx-auto px-4 pb-20">
-        {activeTab === 'single' ? (
-          // 単体アイテム一覧
-          filteredItems.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-2">
-                {items.length === 0 ? 'まだアイテムがありません' : '該当するアイテムが見つかりません'}
-              </p>
-              <p className="text-sm text-gray-400">
-                {items.length === 0 ? '写真を撮影してアイテムを追加しましょう' : '検索条件を変更してみてください'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredItems.map(item => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  onClick={() => onItemClick(item.id)}
-                />
-              ))}
-            </div>
-          )
+      {/* Items List */}
+      <div className="max-w-md mx-auto px-4">
+        {filteredItems.length === 0 && filteredGroups.length === 0 ? (
+          <div className="text-center py-12">
+            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">まだアイテムがありません</p>
+            <p className="text-gray-400 text-sm">写真を撮影してアイテムを追加しましょう</p>
+          </div>
         ) : (
-          // グループ一覧
           <div className="space-y-4">
-            {groups.length === 0 ? (
-              <div className="text-center py-12">
-                <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">まだグループがありません</p>
-              </div>
-            ) : (
-              groups.map(group => (
-                <div
-                  key={group.id}
-                  className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => onGroupClick(group.id)}
-                >
-                  <h3 className="font-medium text-lg mb-2">{group.title}</h3>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {group.tags.map(tag => (
-                      <TagChip
-                        key={tag}
-                        tag={tag}
-                        selected={false}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTagToggle(tag);
-                        }}
-                        style={{
-                          backgroundColor: (tags.find(t => t.name === tag)?.color || '#gray') + '22',
-                          color: tags.find(t => t.name === tag)?.color || '#gray'
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div className="text-sm text-gray-600 mb-3">
-                    写真: {group.photos.length}枚
-                  </div>
-                  {group.memo && (
-                    <div className="text-sm text-gray-600 mb-3">
-                      メモ: {group.memo}
-                    </div>
-                  )}
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {group.photos.map(photo => (
-                      <img
-                        key={photo.id}
-                        src={imageUrlMap[photo.image] || ''}
-                        alt=""
-                        className="w-20 h-20 object-contain rounded"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
+            {/* Display single items */}
+            {filteredItems.map(item => (
+              <ItemCard
+                key={item.id}
+                item={item}
+                onClick={() => onItemClick(item.id)}
+                imageUrl={imageUrlMap[item.image]}
+              />
+            ))}
+            {/* Display groups */}
+            {filteredGroups.map(group => (
+              <ItemCard
+                key={group.id}
+                group={group}
+                onClick={() => onGroupClick(group.id)}
+                imageUrl={group.photos[0] ? imageUrlMap[group.photos[0].image] : undefined}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      {/* Add Button */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
-        <button
-          onClick={() => onAddItem('group')}
-          className="p-4 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-colors"
-          title="写真グループを作成"
-        >
-          <Package className="h-6 w-6" />
-        </button>
-        <button
-          onClick={() => onAddItem('single')}
-          className="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-colors"
-          title="写真を追加"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
-      </div>
-
-      {/* 新規タグ追加モーダル */}
-      {showAddTag && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-md w-80">
-            <h2 className="font-bold mb-2">新しいタグを追加</h2>
-            <input
-              className="border rounded px-2 py-1 w-full mb-2"
-              placeholder="タグ名"
-              value={newTagName}
-              onChange={e => setNewTagName(e.target.value)}
-              maxLength={12}
-            />
-            <div className="mb-4">
-              <span className="block mb-1">色見本(パレットから自由設定も可能):</span>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {COLOR_PALETTE.map(p => (
-                  <button
-                    key={p.color}
-                    type="button"
-                    className="w-6 h-6 rounded-full border-2 focus:outline-none"
-                    style={{
-                      background: p.color,
-                      borderColor: newTagColor === p.color ? '#000' : '#fff',
-                    }}
-                    onClick={() => setNewTagColor(p.color)}
-                    aria-label={p.name}
-                  />
-                ))}
-                <input
-                  type="color"
-                  value={newTagColor}
-                  onChange={e => setNewTagColor(e.target.value)}
-                  className="ml-2 w-8 h-8 p-0 border-none bg-transparent align-middle"
-                  title="カスタム色"
-                />
-              </div>
-            </div>
-            {addTagError && <div className="text-red-500 text-xs mb-2">{addTagError}</div>}
-            <div className="flex gap-2 justify-end">
-              <button
-                className="px-3 py-1 bg-gray-200 rounded"
-                onClick={() => setShowAddTag(false)}
-              >キャンセル</button>
-              <button
-                className="px-3 py-1 bg-blue-500 text-white rounded"
-                onClick={handleAddTag}
-                disabled={!newTagName.trim() || tags.some(t => t.name === newTagName.trim())}
-              >追加</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* タグ編集モーダル */}
-      {editTagIdx !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-md w-80">
-            <h2 className="font-bold mb-2">タグを編集</h2>
-            <input
-              className="border rounded px-2 py-1 w-full mb-2"
-              placeholder="タグ名"
-              value={editTagName}
-              onChange={e => setEditTagName(e.target.value)}
-              maxLength={12}
-            />
-            <div className="flex items-center gap-2 mb-4">
-              <span>色:</span>
-              <input
-                type="color"
-                value={editTagColor}
-                onChange={e => setEditTagColor(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <input type="checkbox" id="editTagBulk" checked={editTagBulk} onChange={e => setEditTagBulk(e.target.checked)} />
-              <label htmlFor="editTagBulk" className="text-sm">既存データのタグ名も一括変更</label>
-            </div>
-            {editTagError && <div className="text-red-500 text-xs mb-2">{editTagError}</div>}
-            <div className="flex gap-2 justify-end">
-              <button
-                className="px-3 py-1 bg-gray-200 rounded"
-                onClick={handleCancelEdit}
-              >キャンセル</button>
-              <button
-                className="px-3 py-1 bg-blue-500 text-white rounded"
-                onClick={handleEditTag}
-                disabled={!editTagName.trim()}
-              >保存</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* インポートモーダル */}
+      {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
@@ -559,9 +462,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <X className="h-5 w-5" />
                 </button>
               </div>
-
               <div className="space-y-4">
-                {/* ファイルアップロード */}
                 <label className="block p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-center gap-2">
                     <FileText className="h-6 w-6 text-gray-400" />
@@ -583,7 +484,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     }}
                   />
                 </label>
-
                 <div className="relative">
                   <textarea
                     value={importText}
@@ -599,11 +499,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     <Clipboard className="h-5 w-5" />
                   </button>
                 </div>
-
                 {importError && (
                   <div className="text-red-500 text-sm">{importError}</div>
                 )}
-
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setShowImportModal(false)}
@@ -628,16 +526,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
       )}
-
-      <button
-        onClick={() => {
-          localStorage.removeItem('postal_tags');
-          window.location.reload();
-        }}
-        className="px-3 py-1 bg-red-500 text-white rounded"
-      >
-        タグを初期状態に戻す
-      </button>
     </div>
   );
 };

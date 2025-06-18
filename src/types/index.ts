@@ -24,6 +24,8 @@ export interface PhotoItem {
   ocrText: string;
   createdAt: Date;
   metadata?: PhotoMetadata;
+  tags?: string[];
+  memo?: string;
 }
 
 export interface PostalItemGroup {
@@ -43,7 +45,7 @@ export interface Tag {
   count: number;
 }
 
-export type Screen = 'home' | 'add' | 'detail' | 'add-group' | 'detail-group';
+export type Screen = 'home' | 'unified-add' | 'detail' | 'detail-group';
 
 export interface AppState {
   currentScreen: Screen;

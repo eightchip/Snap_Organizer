@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { PostalItemGroup, PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2 } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import { loadImageBlob } from '../../utils/imageDB';
+import { shareGroup } from '../../utils/share';
 
 interface DetailGroupScreenProps {
   group: PostalItemGroup;
@@ -25,6 +26,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const [editedMemo, setEditedMemo] = useState(group.memo);
   const [editedTags, setEditedTags] = useState<string[]>(group.tags);
   const [editedPhotos, setEditedPhotos] = useState<PhotoItem[]>(group.photos);
+  const [isSharing, setIsSharing] = useState(false);
   const [availableTags, setAvailableTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
@@ -121,6 +123,21 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     setEditedPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
+  const handleShare = async () => {
+    setIsSharing(true);
+    try {
+      const success = await shareGroup(group);
+      if (!success) {
+        alert('共有に失敗しました。');
+      }
+    } catch (error) {
+      console.error('共有エラー:', error);
+      alert('共有中にエラーが発生しました。');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   // DataURL→File変換
   function dataURLtoFile(dataurl: string, filename: string): File {
     const arr = dataurl.split(',');
@@ -168,6 +185,15 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
                 </>
               ) : (
                 <>
+                  <button
+                    onClick={handleShare}
+                    disabled={isSharing}
+                    className={`p-2 rounded-lg transition-colors ${
+                      isSharing ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-blue-100'
+                    }`}
+                  >
+                    <Share2 className={`h-5 w-5 ${isSharing ? 'text-gray-400' : 'text-blue-500'}`} />
+                  </button>
                   <button
                     onClick={() => setIsEditing(true)}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"

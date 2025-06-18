@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { PostalItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2 } from 'lucide-react';
 import { loadImageBlob } from '../../utils/imageDB';
+import { shareItem } from '../../utils/share';
 
 interface DetailScreenProps {
   item: PostalItem;
@@ -28,6 +29,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   const [editedMemo, setEditedMemo] = useState(item.memo);
   const [editedTags, setEditedTags] = useState<string[]>(item.tags);
   const [isListening, setIsListening] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [availableTags, setAvailableTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
@@ -115,6 +117,21 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     recognition.start();
   };
 
+  const handleShare = async () => {
+    setIsSharing(true);
+    try {
+      const success = await shareItem(item);
+      if (!success) {
+        alert('共有に失敗しました。');
+      }
+    } catch (error) {
+      console.error('共有エラー:', error);
+      alert('共有中にエラーが発生しました。');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -148,6 +165,15 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
                 </>
               ) : (
                 <>
+                  <button
+                    onClick={handleShare}
+                    disabled={isSharing}
+                    className={`p-2 rounded-lg transition-colors ${
+                      isSharing ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-blue-100'
+                    }`}
+                  >
+                    <Share2 className={`h-5 w-5 ${isSharing ? 'text-gray-400' : 'text-blue-500'}`} />
+                  </button>
                   <button
                     onClick={() => setIsEditing(true)}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"

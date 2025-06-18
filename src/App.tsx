@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Screen, AppState, PostalItemGroup } from './types';
+import { Screen, AppState, PostalItemGroup, PhotoItem } from './types';
 import { usePostalItems } from './hooks/usePostalItems';
 import { HomeScreen } from './components/screens/HomeScreen';
-import { AddScreen } from './components/screens/AddScreen';
-import { AddGroupScreen } from './components/screens/AddGroupScreen';
+import { UnifiedAddScreen } from './components/screens/UnifiedAddScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
 import { DetailGroupScreen } from './components/screens/DetailGroupScreen';
 import { loadGroups, saveGroups } from './utils/storage';
@@ -115,30 +114,25 @@ function App() {
     }));
   };
 
-  const handleAddItem = (mode: 'single' | 'group') => {
-    navigateTo(mode === 'single' ? 'add' : 'add-group');
+  const handleAddItem = (mode: 'unified') => {
+    navigateTo('unified-add');
   };
 
-  const handleAddSingleItem = async (data: {
-    image: string;
-    ocrText: string;
-    tags: string[];
-    memo: string;
-  }) => {
+  const handleUnifiedAdd = async (data: PhotoItem | PostalItemGroup) => {
     setError(null);
     try {
-      await addItem(data);
-      navigateTo('home');
-    } catch (error: any) {
-      setError(error.message || '保存に失敗しました');
-      console.error('Save error:', error);
-    }
-  };
-
-  const handleAddGroup = async (group: PostalItemGroup) => {
-    setError(null);
-    try {
-      await addGroup(group);
+      if ('photos' in data) {
+        // Group mode
+        await addGroup(data);
+      } else {
+        // Single photo mode
+        await addItem({
+          image: data.image,
+          ocrText: data.ocrText || '',
+          tags: data.tags || [],
+          memo: data.memo || ''
+        });
+      }
       navigateTo('home');
     } catch (error: any) {
       setError(error.message || '保存に失敗しました');
@@ -216,18 +210,10 @@ function App() {
           </>
         );
 
-      case 'add':
+      case 'unified-add':
         return (
-          <AddScreen
-            onSave={handleAddSingleItem}
-            onBack={() => navigateTo('home')}
-          />
-        );
-
-      case 'add-group':
-        return (
-          <AddGroupScreen
-            onSave={handleAddGroup}
+          <UnifiedAddScreen
+            onSave={handleUnifiedAdd}
             onBack={() => navigateTo('home')}
           />
         );
