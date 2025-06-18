@@ -1,72 +1,75 @@
+import init, { resize_image, preprocess_image_for_ocr } from '../../your-wasm-pkg/pkg/your_wasm_pkg';
+
+let wasmInitialized = false;
+
+const initializeWasm = async () => {
+  if (!wasmInitialized) {
+    await init();
+    wasmInitialized = true;
+  }
+};
+
 export const resizeImage = async (
   file: File,
   maxWidth: number,
   maxHeight: number,
   quality: number = 0.8
 ): Promise<Blob> => {
+  await initializeWasm();
+
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
       try {
-        // 元の画像のアスペクト比を維持
-        let width = img.width;
-        let height = img.height;
-        const aspectRatio = width / height;
-
-        // 最大サイズに合わせてリサイズ
-        if (width > maxWidth) {
-          width = maxWidth;
-          height = width / aspectRatio;
+        const base64Image = e.target?.result as string;
+        const resizedBase64 = await resize_image(base64Image, maxWidth, maxHeight, quality * 100);
+        
+        // Base64からBlobに変換
+        const byteString = atob(resizedBase64.split(',')[1]);
+        const mimeString = resizedBase64.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
         }
-        if (height > maxHeight) {
-          height = maxHeight;
-          width = height * aspectRatio;
-        }
-
-        // キャンバスの作成
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Canvas context not available'));
-          return;
-        }
-
-        // 画像の描画
-        ctx.fillStyle = 'white'; // 背景を白に
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Blob形式で出力
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to create blob'));
-            }
-          },
-          'image/jpeg',
-          quality
-        );
-      } catch (e) {
-        reject(e);
+        
+        resolve(new Blob([ab], { type: mimeString }));
+      } catch (error) {
+        reject(error);
       }
     };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+};
 
-    img.onerror = () => {
-      reject(new Error('Failed to load image'));
-    };
+export const preprocessImageForOcr = async (file: File): Promise<Blob> => {
+  await initializeWasm();
 
-    // ファイルをData URLとして読み込み
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      img.src = e.target?.result as string;
+    reader.onload = async (e) => {
+      try {
+        const base64Image = e.target?.result as string;
+        const processedBase64 = await preprocess_image_for_ocr(base64Image);
+        
+        // Base64からBlobに変換
+        const byteString = atob(processedBase64.split(',')[1]);
+        const mimeString = processedBase64.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        
+        resolve(new Blob([ab], { type: mimeString }));
+      } catch (error) {
+        reject(error);
+      }
     };
-    reader.onerror = () => {
-      reject(new Error('Failed to read file'));
-    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
 }; 

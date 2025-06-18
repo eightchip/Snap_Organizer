@@ -17,7 +17,8 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp'
-    }
+    },
+    port: 3000
   },
   build: {
     target: 'esnext',
