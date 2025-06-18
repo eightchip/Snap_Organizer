@@ -1,5 +1,5 @@
 {
-  "buildCommand": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source $HOME/.cargo/env && cargo install wasm-pack && npm run build",
-  "installCommand": "npm install",
+  "buildCommand": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . $HOME/.cargo/env && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && npm run build",
+  "installCommand": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . $HOME/.cargo/env && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && npm install",
   "framework": "vite"
 } 
