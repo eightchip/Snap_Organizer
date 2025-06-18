@@ -14,6 +14,8 @@ interface UnifiedAddScreenProps {
   onBack: () => void;
 }
 
+type OcrMode = 'disabled' | 'tesseract' | 'google-cloud';
+
 export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBack }) => {
   // State for both single and multiple photos
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -25,6 +27,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showSaved, setShowSaved] = useState(false);
+  const [ocrMode, setOcrMode] = useState<OcrMode>('disabled');
   const [useCloudOcr, setUseCloudOcr] = useState(false);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
 
@@ -112,6 +115,11 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
     const photo = photos.find(p => p.id === photoId);
     if (!photo) return;
 
+    if (ocrMode === 'disabled') {
+      setSaveError('OCRモードが選択されていません');
+      return;
+    }
+
     setIsProcessing(true);
     setSaveError(null);
 
@@ -120,7 +128,9 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       if (!blob) throw new Error('画像の読み込みに失敗しました');
 
       let extractedText = '';
-      if (useCloudOcr) {
+      const file = new File([blob], 'image.jpg', { type: blob.type });
+
+      if (ocrMode === 'google-cloud') {
         const base64 = await blobToBase64(blob);
         const res = await fetch('/api/vision-ocr', {
           method: 'POST',
@@ -134,9 +144,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
 
         const { text } = await res.json();
         extractedText = text;
-      } else {
-        // Convert Blob to File for Tesseract OCR
-        const file = new File([blob], 'image.jpg', { type: blob.type });
+      } else if (ocrMode === 'tesseract') {
         extractedText = await runTesseractOcr(file);
       }
 
@@ -267,17 +275,36 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">写真を追加</h2>
           
-          {/* OCR toggle (Only for single photo) */}
+          {/* OCR Settings (Only for single photo) */}
           {photos.length === 1 && (
-            <div className="flex items-center gap-4 mb-4">
-              <label className="flex items-center gap-1 text-sm">
-                <input
-                  type="checkbox"
-                  checked={useCloudOcr}
-                  onChange={e => setUseCloudOcr(e.target.checked)}
-                />
-                Google Cloud Visionで認識する（有料）
-              </label>
+            <div className="flex flex-col gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <select
+                  value={ocrMode}
+                  onChange={(e) => setOcrMode(e.target.value as OcrMode)}
+                  className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="disabled">OCR無効</option>
+                  <option value="tesseract">Tesseract OCR（無料）</option>
+                  <option value="google-cloud">Google Cloud Vision（有料）</option>
+                </select>
+                {ocrMode !== 'disabled' && (
+                  <button
+                    onClick={() => handleOcr(photos[0].id)}
+                    disabled={isProcessing}
+                    className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isProcessing ? '処理中...' : 'OCR実行'}
+                  </button>
+                )}
+              </div>
+              {ocrMode !== 'disabled' && (
+                <p className="text-sm text-gray-500">
+                  {ocrMode === 'tesseract' 
+                    ? '※ Tesseract OCRは無料ですが、精度が低い場合があります。'
+                    : '※ Google Cloud Visionは有料ですが、高精度な認識が可能です。'}
+                </p>
+              )}
             </div>
           )}
 

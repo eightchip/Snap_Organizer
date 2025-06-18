@@ -76,10 +76,65 @@ export const runTesseractOcr = async (file: File, timeoutMs = 20000): Promise<st
   return Promise.race([ocrPromise, timeoutPromise]);
 };
 
-// Google Cloud Vision OCR（プレースホルダー）
+// Google Cloud Vision OCR
 export const runGoogleCloudOcr = async (file: File): Promise<string> => {
-  // TODO: 実装時に.envからAPIキーを取得し、APIリクエストを送信
-  throw new Error('Google Cloud Vision OCRは未実装です');
+  try {
+    const base64 = await fileToBase64(file);
+    const apiKey = await getGoogleCloudApiKey();
+
+    if (!apiKey) {
+      throw new Error('Google Cloud Vision APIキーが設定されていません');
+    }
+
+    const response = await fetch(
+      `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [
+            {
+              image: { content: base64.split(',')[1] },
+              features: [{ type: 'TEXT_DETECTION' }]
+            }
+          ]
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Google Cloud Vision API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    return data.responses?.[0]?.fullTextAnnotation?.text || '';
+  } catch (error) {
+    console.error('Google Cloud Vision OCR error:', error);
+    throw error;
+  }
+};
+
+// APIキーを取得（Tauriの設定から）
+const getGoogleCloudApiKey = async (): Promise<string | null> => {
+  try {
+    // TODO: Tauriの設定からAPIキーを取得する実装
+    // 一時的に環境変数から取得
+    return (import.meta.env as ImportMetaEnv).VITE_GOOGLE_CLOUD_VISION_API_KEY || null;
+  } catch (error) {
+    console.error('Failed to get Google Cloud API key:', error);
+    return null;
+  }
+};
+
+// ファイルをBase64に変換
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 };
 
 export const imageToDataURL = (file: File): Promise<string> => {
