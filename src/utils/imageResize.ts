@@ -1,4 +1,10 @@
-import init, { resize_image, preprocess_image_for_ocr } from '../../your-wasm-pkg/pkg/your_wasm_pkg';
+import init, { resize_image, preprocess_image_for_ocr } from '../../your-wasm-pkg/pkg';
+
+declare module '../../your-wasm-pkg/pkg' {
+  export function resize_image(base64_image: string, max_width: number, max_height: number, quality: number): Promise<string>;
+  export function preprocess_image_for_ocr(base64_image: string): Promise<string>;
+  export default function init(): Promise<void>;
+}
 
 let wasmInitialized = false;
 
