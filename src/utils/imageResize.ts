@@ -122,6 +122,9 @@ const adjustImageOrientation = (file) => {
       const img = new Image();
 
       img.onload = () => {
+        console.log('Image loaded');
+        console.log('Orientation:', orientation);
+
         // Set canvas dimensions
         canvas.width = img.width;
         canvas.height = img.height;
@@ -129,22 +132,30 @@ const adjustImageOrientation = (file) => {
         // Rotate image based on orientation
         switch (orientation) {
           case 3:
+            console.log('Rotating 180 degrees');
             ctx.rotate(Math.PI);
             ctx.drawImage(img, -img.width, -img.height);
             break;
           case 6:
+            console.log('Rotating 90 degrees clockwise');
             ctx.rotate(Math.PI / 2);
             ctx.drawImage(img, 0, -img.height);
             break;
           case 8:
+            console.log('Rotating 90 degrees counterclockwise');
             ctx.rotate(-Math.PI / 2);
             ctx.drawImage(img, -img.width, 0);
             break;
           default:
+            console.log('No rotation needed');
             ctx.drawImage(img, 0, 0);
         }
 
         resolve(canvas.toDataURL());
+      };
+
+      img.onerror = (error) => {
+        reject(new Error('Failed to load image'));
       };
 
       img.src = URL.createObjectURL(file);
