@@ -79,35 +79,58 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       for (const file of Array.from(event.target.files)) {
         // Generate unique ID and process image
         const id = generateId();
-        const resizedBlob = await resizeImage(file);
-        await saveImageBlob(id, resizedBlob);
+        
+        // Convert File to base64
+        const base64Image = await imageToDataURL(file);
+        
+        try {
+          // リサイズ処理
+          const resizedBase64 = await resizeImage(base64Image);
+          
+          // Base64からBlobに変換
+          const byteString = atob(resizedBase64.split(',')[1]);
+          const mimeString = resizedBase64.split(',')[0].split(':')[1].split(';')[0];
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          
+          const resizedBlob = new Blob([ab], { type: mimeString });
+          await saveImageBlob(id, resizedBlob);
 
-        // Extract metadata
-        const metadata: PhotoMetadata = {
-          filename: file.name,
-          source: photos.length === 0 ? 'single' : 'bulk',
-          dateTaken: await extractDateTaken(file),
-          location: await extractLocation(file),
-        };
+          // Extract metadata
+          const metadata: PhotoMetadata = {
+            filename: file.name,
+            source: photos.length === 0 ? 'single' : 'bulk',
+            dateTaken: await extractDateTaken(file),
+            location: await extractLocation(file),
+          };
 
-        // Create photo item
-        const photo: PhotoItem = {
-          id,
-          image: id,
-          ocrText: '',
-          createdAt: new Date(),
-          metadata,
-          tags: [],
-          memo: ''
-        };
+          // Create photo item
+          const photo: PhotoItem = {
+            id,
+            image: id,
+            ocrText: '',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata,
+            tags: [],
+            memo: ''
+          };
 
-        newPhotos.push(photo);
+          newPhotos.push(photo);
+        } catch (error) {
+          console.error('Image processing error:', error);
+          throw new Error('画像の処理に失敗しました: ' + (error as Error).message);
+        }
       }
 
       setPhotos(prev => [...prev, ...newPhotos]);
     } catch (error) {
       console.error('File processing error:', error);
-      setSaveError('写真の処理中にエラーが発生しました');
+      setSaveError(error instanceof Error ? error.message : '写真の処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
       // Reset file input

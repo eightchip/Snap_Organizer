@@ -18,26 +18,34 @@ async function initializeWasm() {
       console.log('WebAssembly initialized successfully');
     } catch (error) {
       console.error('Failed to initialize WebAssembly:', error);
-      throw new Error('Failed to initialize image processing');
+      throw new Error('画像処理の初期化に失敗しました');
     }
   }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   const timeoutPromise = new Promise<T>((_, reject) => {
-    setTimeout(() => reject(new Error('Image processing timed out')), timeoutMs);
+    setTimeout(() => reject(new Error('画像処理がタイムアウトしました')), timeoutMs);
   });
   return Promise.race([promise, timeoutPromise]);
 }
 
-function validateImage(base64Image: string) {
-  if (!base64Image.startsWith('data:image/')) {
-    throw new Error('Invalid image format: Must be a data URL');
+function validateImage(base64Image: string | null | undefined): string {
+  if (!base64Image) {
+    throw new Error('画像データが見つかりません');
   }
 
-  const sizeInBytes = Math.ceil((base64Image.length * 3) / 4);
-  if (sizeInBytes > MAX_IMAGE_SIZE) {
-    throw new Error(`Image too large: Maximum size is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`);
+  // データがBase64形式かどうかをチェック
+  try {
+    if (base64Image.includes('base64,')) {
+      return base64Image;
+    }
+
+    // データURLでない場合は、Base64データとして扱い、データURLに変換
+    return `data:image/jpeg;base64,${base64Image}`;
+  } catch (error) {
+    console.error('Image validation error:', error);
+    throw new Error('画像データの形式が正しくありません');
   }
 }
 
@@ -49,25 +57,24 @@ export async function resizeImage(
 ): Promise<string> {
   console.log('Starting image resize...');
   try {
-    validateImage(base64Image);
+    const validatedImage = validateImage(base64Image);
     await initializeWasm();
 
     console.log(`Resizing image to ${maxWidth}x${maxHeight} with quality ${quality}`);
     const result = await withTimeout(
-      Promise.resolve(resize_image(base64Image, maxWidth, maxHeight, quality * 100)),
+      Promise.resolve(resize_image(validatedImage, maxWidth, maxHeight, quality * 100)),
       PROCESSING_TIMEOUT
     );
+
+    if (!result) {
+      throw new Error('画像のリサイズに失敗しました');
+    }
 
     console.log('Image resize completed successfully');
     return result;
   } catch (error) {
     console.error('Image resize error:', error);
     if (error instanceof Error) {
-      if (error.message.includes('timed out')) {
-        throw new Error('画像処理がタイムアウトしました。画像サイズを小さくしてみてください。');
-      } else if (error.message.includes('too large')) {
-        throw new Error('画像サイズが大きすぎます。10MB以下の画像を使用してください。');
-      }
       throw new Error('画像の処理に失敗しました: ' + error.message);
     }
     throw new Error('画像の処理に失敗しました');
@@ -77,25 +84,24 @@ export async function resizeImage(
 export async function preprocessImageForOcr(base64Image: string): Promise<string> {
   console.log('Starting OCR preprocessing...');
   try {
-    validateImage(base64Image);
+    const validatedImage = validateImage(base64Image);
     await initializeWasm();
 
     console.log('Processing image for OCR...');
     const result = await withTimeout(
-      Promise.resolve(preprocess_image_for_ocr(base64Image)),
+      Promise.resolve(preprocess_image_for_ocr(validatedImage)),
       PROCESSING_TIMEOUT
     );
+
+    if (!result) {
+      throw new Error('OCR前処理に失敗しました');
+    }
 
     console.log('OCR preprocessing completed successfully');
     return result;
   } catch (error) {
     console.error('Image preprocessing error:', error);
     if (error instanceof Error) {
-      if (error.message.includes('timed out')) {
-        throw new Error('OCR前処理がタイムアウトしました。画像サイズを小さくしてみてください。');
-      } else if (error.message.includes('too large')) {
-        throw new Error('画像サイズが大きすぎます。10MB以下の画像を使用してください。');
-      }
       throw new Error('OCR前処理に失敗しました: ' + error.message);
     }
     throw new Error('OCR前処理に失敗しました');
