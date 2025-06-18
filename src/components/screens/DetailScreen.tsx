@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { PostalItem } from '../../types';
+import { PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2 } from 'lucide-react';
 import { loadImageBlob } from '../../utils/imageDB';
 import { shareItem } from '../../utils/share';
 
 interface DetailScreenProps {
-  item: PostalItem;
+  item: PhotoItem;
   onBack: () => void;
-  onUpdate: (updates: Partial<PostalItem>) => void;
-  onDelete: () => void;
+  onUpdate: (updates: Partial<PhotoItem>) => void;
+  onDelete?: () => void;
 }
 
 const getTagColor = (tagName: string) => {
@@ -89,7 +89,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
 
   const handleDelete = () => {
     if (window.confirm('このアイテムを削除しますか？')) {
-      onDelete();
+      onDelete?.();
     }
   };
 

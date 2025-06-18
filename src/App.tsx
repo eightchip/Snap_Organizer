@@ -14,26 +14,20 @@ function App() {
     addItem,
     addGroup,
     updateItem,
-    deleteItem,
     getItem,
-    setItems,
-    setGroups,
-    clearStorage
+    getGroup,
+    updateGroup
   } = usePostalItems();
 
+  // 検索とタグフィルター用の状態
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
   const [appState, setAppState] = useState<AppState>({
-    currentScreen: 'home',
-    selectedItemId: null,
-    searchQuery: '',
-    selectedTags: []
+    screen: { type: 'home' }
   });
 
   const [error, setError] = useState<string | null>(null);
-
-  // グループデータの読み込み
-  useEffect(() => {
-    setGroups(loadGroups());
-  }, []);
 
   // タグ情報もlocalStorageから取得
   const getTags = () => {
@@ -48,13 +42,9 @@ function App() {
   const handleImport = async (data: any) => {
     setError(null);
     try {
-      // データの検証
       if (!data.items && !data.groups && !data.tags) {
         throw new Error('インポートするデータが見つかりません');
       }
-
-      // 一旦ストレージをクリア
-      await clearStorage();
 
       // 日付の修正
       const fixItems = (items: any[]) => items.map(item => ({
@@ -63,8 +53,18 @@ function App() {
         updatedAt: new Date(item.updatedAt)
       }));
 
-      if (data.items) setItems(fixItems(data.items));
-      if (data.groups) setGroups(fixItems(data.groups));
+      if (data.items) {
+        const fixedItems = fixItems(data.items);
+        for (const item of fixedItems) {
+          await addItem(item);
+        }
+      }
+      if (data.groups) {
+        const fixedGroups = fixItems(data.groups);
+        for (const group of fixedGroups) {
+          await addGroup(group);
+        }
+      }
       if (data.tags) setTags(data.tags);
 
       alert('データをインポートしました');
@@ -93,29 +93,24 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  const navigateTo = (screen: Screen, itemId?: string) => {
-    setAppState(prev => ({
-      ...prev,
-      currentScreen: screen,
-      selectedItemId: itemId || null
-    }));
+  const navigateTo = (screen: Screen) => {
+    setAppState({ screen });
   };
 
   const handleSearchChange = (query: string) => {
-    setAppState(prev => ({ ...prev, searchQuery: query }));
+    setSearchQuery(query);
   };
 
   const handleTagToggle = (tag: string) => {
-    setAppState(prev => ({
-      ...prev,
-      selectedTags: prev.selectedTags.includes(tag)
-        ? prev.selectedTags.filter(t => t !== tag)
-        : [...prev.selectedTags, tag]
-    }));
+    setSelectedTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
   };
 
-  const handleAddItem = (mode: 'unified') => {
-    navigateTo('unified-add');
+  const handleAddItem = () => {
+    navigateTo({ type: 'add', mode: 'unified' });
   };
 
   const handleUnifiedAdd = async (data: PhotoItem | PostalItemGroup) => {
@@ -126,127 +121,96 @@ function App() {
         await addGroup(data);
       } else {
         // Single photo mode
-        await addItem({
-          image: data.image,
-          ocrText: data.ocrText || '',
-          tags: data.tags || [],
-          memo: data.memo || ''
-        });
+        await addItem(data);
       }
-      navigateTo('home');
+      navigateTo({ type: 'home' });
     } catch (error: any) {
       setError(error.message || '保存に失敗しました');
       console.error('Save error:', error);
     }
   };
 
-  const handleUpdateItem = (itemId: string, updates: any) => {
+  const handleUpdateItem = (itemId: string, updates: Partial<PhotoItem>) => {
     updateItem(itemId, updates);
   };
 
-  const handleDeleteItem = (itemId: string) => {
-    deleteItem(itemId);
-    navigateTo('home');
+  const handleItemClick = (itemId: string) => {
+    navigateTo({ type: 'detail', itemId });
+  };
+
+  const handleGroupClick = (groupId: string) => {
+    navigateTo({ type: 'detail-group', groupId });
   };
 
   const handleBulkTagRename = (oldName: string, newName: string) => {
     // アイテムのタグ更新
-    const updatedItems = items.map(item => ({
-      ...item,
-      tags: item.tags.map(tag => tag === oldName ? newName : tag)
-    }));
-    setItems(updatedItems);
+    items.forEach(item => {
+      if (item.tags.includes(oldName)) {
+        const updatedTags = item.tags.map(tag => tag === oldName ? newName : tag);
+        updateItem(item.id, { tags: updatedTags });
+      }
+    });
 
     // グループのタグ更新
-    const updatedGroups = groups.map(group => ({
-      ...group,
-      tags: group.tags.map(tag => tag === oldName ? newName : tag)
-    }));
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-  };
-
-  const handleUpdateGroup = (groupId: string, updates: Partial<PostalItemGroup>) => {
-    const updatedGroups = groups.map(group =>
-      group.id === groupId
-        ? { ...group, ...updates }
-        : group
-    );
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-  };
-
-  const handleDeleteGroup = (groupId: string) => {
-    const updatedGroups = groups.filter(group => group.id !== groupId);
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-    navigateTo('home');
+    groups.forEach(group => {
+      if (group.tags.includes(oldName)) {
+        const updatedTags = group.tags.map(tag => tag === oldName ? newName : tag);
+        updateGroup(group.id, { tags: updatedTags });
+      }
+    });
   };
 
   const renderScreen = () => {
-    switch (appState.currentScreen) {
+    switch (appState.screen.type) {
       case 'home':
         return (
-          <>
-            {error && (
-              <div className="mx-auto max-w-md bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                <p>{error}</p>
-              </div>
-            )}
-            <HomeScreen
-              items={items}
-              groups={groups}
-              searchQuery={appState.searchQuery}
-              selectedTags={appState.selectedTags}
-              onSearchChange={handleSearchChange}
-              onTagToggle={handleTagToggle}
-              onAddItem={handleAddItem}
-              onItemClick={(itemId) => navigateTo('detail', itemId)}
-              onGroupClick={(groupId) => navigateTo('detail-group', groupId)}
-              onBulkTagRename={handleBulkTagRename}
-              onImport={handleImport}
-              onExport={handleExport}
-            />
-          </>
+          <HomeScreen
+            items={items}
+            groups={groups}
+            searchQuery={searchQuery}
+            selectedTags={selectedTags}
+            onSearchChange={handleSearchChange}
+            onTagToggle={handleTagToggle}
+            onAddItem={handleAddItem}
+            onItemClick={handleItemClick}
+            onGroupClick={handleGroupClick}
+            onBulkTagRename={handleBulkTagRename}
+            onImport={handleImport}
+            onExport={handleExport}
+          />
         );
 
-      case 'unified-add':
+      case 'add':
         return (
           <UnifiedAddScreen
             onSave={handleUnifiedAdd}
-            onBack={() => navigateTo('home')}
+            onBack={() => navigateTo({ type: 'home' })}
           />
         );
 
       case 'detail':
-        const selectedItem = appState.selectedItemId ? getItem(appState.selectedItemId) : null;
-        if (!selectedItem) {
-          navigateTo('home');
-          return null;
-        }
+        const item = getItem(appState.screen.itemId);
+        if (!item) return null;
         return (
           <DetailScreen
-            item={selectedItem}
-            onBack={() => navigateTo('home')}
-            onUpdate={(updates) => handleUpdateItem(selectedItem.id, updates)}
-            onDelete={() => handleDeleteItem(selectedItem.id)}
+            item={item}
+            onBack={() => navigateTo({ type: 'home' })}
+            onUpdate={(updates) => handleUpdateItem(item.id, updates)}
           />
         );
 
       case 'detail-group':
-        const selectedGroup = appState.selectedItemId
-          ? groups.find(g => g.id === appState.selectedItemId)
-          : null;
-        if (!selectedGroup) {
-          navigateTo('home');
-          return null;
-        }
+        const group = getGroup(appState.screen.groupId);
+        if (!group) return null;
         return (
           <DetailGroupScreen
-            group={selectedGroup}
-            onBack={() => navigateTo('home')}
-            onUpdate={(updates) => handleUpdateGroup(selectedGroup.id, updates)}
-            onDelete={() => handleDeleteGroup(selectedGroup.id)}
+            group={group}
+            onBack={() => navigateTo({ type: 'home' })}
+            onUpdate={(updates) => updateGroup(group.id, updates)}
+            onDelete={() => {
+              updateGroup(group.id, { deleted: true });
+              navigateTo({ type: 'home' });
+            }}
           />
         );
 
@@ -255,7 +219,16 @@ function App() {
     }
   };
 
-  return <div className="App">{renderScreen()}</div>;
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {error && (
+        <div className="mx-auto max-w-md bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <p>{error}</p>
+        </div>
+      )}
+      {renderScreen()}
+    </div>
+  );
 }
 
 export default App;
