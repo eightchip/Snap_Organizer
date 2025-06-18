@@ -8,7 +8,7 @@
     "build:wasm": "cd your-wasm-pkg && wasm-pack build --target web",
     "lint": "eslint .",
     "preview": "vite preview",
-    "postinstall": "node -e \"try { require('fs').chmodSync('node_modules/.bin/vite', '755') } catch (e) { }\" && npm run build:wasm"
+    "postinstall": "node -e \"try { require('fs').chmodSync('node_modules/.bin/vite', '755') } catch (e) { }\""
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
