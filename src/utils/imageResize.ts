@@ -112,7 +112,12 @@ export async function preprocessImageForOcr(base64Image: string): Promise<string
 const adjustImageOrientation = (file) => {
   return new Promise((resolve, reject) => {
     EXIF.getData(file, function() {
+      const allTags = EXIF.getAllTags(this);
+      console.log('All EXIF Tags:', allTags);
+
       const orientation = EXIF.getTag(this, 'Orientation');
+      console.log('Orientation:', orientation);
+
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) {
