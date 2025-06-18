@@ -77,28 +77,28 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       const newPhotos: PhotoItem[] = [];
       
       for (const file of Array.from(event.target.files)) {
-        // Generate unique ID and process image
-        const id = generateId();
-        
-        // Convert File to base64
-        const base64Image = await imageToDataURL(file);
-        
         try {
+          // Generate unique ID
+          const id = generateId();
+          console.log(`Processing image: ${file.name}, size: ${file.size} bytes`);
+          
+          // Convert File to base64
+          const base64Image = await imageToDataURL(file);
+          console.log('File converted to base64');
+          
           // リサイズ処理
           const resizedBase64 = await resizeImage(base64Image);
+          console.log('Image resized successfully');
           
           // Base64からBlobに変換
-          const byteString = atob(resizedBase64.split(',')[1]);
-          const mimeString = resizedBase64.split(',')[0].split(':')[1].split(';')[0];
-          const ab = new ArrayBuffer(byteString.length);
-          const ia = new Uint8Array(ab);
+          const response = await fetch(resizedBase64);
+          if (!response.ok) throw new Error('Failed to create blob from resized image');
           
-          for (let i = 0; i < byteString.length; i++) {
-            ia[i] = byteString.charCodeAt(i);
-          }
+          const resizedBlob = await response.blob();
+          console.log(`Resized blob created, size: ${resizedBlob.size} bytes`);
           
-          const resizedBlob = new Blob([ab], { type: mimeString });
           await saveImageBlob(id, resizedBlob);
+          console.log('Image blob saved successfully');
 
           // Extract metadata
           const metadata: PhotoMetadata = {
@@ -121,13 +121,19 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
           };
 
           newPhotos.push(photo);
+          console.log(`Photo item created successfully: ${id}`);
         } catch (error) {
           console.error('Image processing error:', error);
-          throw new Error('画像の処理に失敗しました: ' + (error as Error).message);
+          throw new Error(`画像「${file.name}」の処理に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
         }
       }
 
-      setPhotos(prev => [...prev, ...newPhotos]);
+      if (newPhotos.length > 0) {
+        setPhotos(prev => [...prev, ...newPhotos]);
+        console.log(`${newPhotos.length} photos processed successfully`);
+      } else {
+        throw new Error('写真の処理に失敗しました');
+      }
     } catch (error) {
       console.error('File processing error:', error);
       setSaveError(error instanceof Error ? error.message : '写真の処理中にエラーが発生しました');
