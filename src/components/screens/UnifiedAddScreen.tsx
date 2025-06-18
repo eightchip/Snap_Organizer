@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff, X, Info } from 'lucide-react';
 import { TagChip } from '../TagChip';
-import { PhotoItem, PostalItemGroup, PhotoMetadata } from '../../types';
+import { PhotoItem, PostalItemGroup, PhotoMetadata, Location } from '../../types';
 import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/ocr';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { resizeImage } from '../../utils/imageResize';
 import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
 import init, { preprocess_image_color } from '../../pkg/your_wasm_pkg';
+import EXIF from 'exif-js';
 
 interface UnifiedAddScreenProps {
   onSave: (data: PhotoItem | PostalItemGroup) => void;
@@ -67,47 +68,104 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
 
   // Handle file selection
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!wasmReady) {
-      alert('WASMの初期化中です。少し待ってから再度お試しください。');
-      return;
-    }
-
+    if (!event.target.files?.length) return;
+    
     setIsProcessing(true);
     setSaveError(null);
 
     try {
-      const files = Array.from(event.target.files || []);
-      if (files.length === 0) return;
+      const newPhotos: PhotoItem[] = [];
+      
+      for (const file of Array.from(event.target.files)) {
+        // Generate unique ID and process image
+        const id = generateId();
+        const resizedBlob = await resizeImage(file);
+        await saveImageBlob(id, resizedBlob);
 
-      const processedPhotos: PhotoItem[] = [];
-      for (const file of files) {
-        if (!file.type.startsWith('image/')) continue;
-        if (file.size > 1024 * 1024 * 5) { // 5MB limit
-          alert('画像サイズが大きすぎます');
-          continue;
-        }
+        // Extract metadata
+        const metadata: PhotoMetadata = {
+          filename: file.name,
+          source: photos.length === 0 ? 'single' : 'bulk',
+          dateTaken: await extractDateTaken(file),
+          location: await extractLocation(file),
+        };
 
-        const imageId = generateId();
-        await saveImageBlob(imageId, file);
-
-        const metadata: PhotoMetadata = { dateTime: new Date().toISOString() };
-        processedPhotos.push({
-          id: generateId(),
-          image: imageId,
+        // Create photo item
+        const photo: PhotoItem = {
+          id,
+          image: id,
           ocrText: '',
-          createdAt: new Date(metadata.dateTime ?? Date.now()),
-          metadata
-        });
+          createdAt: new Date(),
+          metadata,
+          tags: [],
+          memo: ''
+        };
+
+        newPhotos.push(photo);
       }
 
-      setPhotos(prev => [...prev, ...processedPhotos]);
+      setPhotos(prev => [...prev, ...newPhotos]);
     } catch (error) {
-      console.error('Error processing images:', error);
-      setSaveError('画像の処理中にエラーが発生しました');
+      console.error('File processing error:', error);
+      setSaveError('写真の処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
-      if (event.target) event.target.value = '';
+      // Reset file input
+      event.target.value = '';
     }
+  };
+
+  // Metadata extraction utilities
+  const extractDateTaken = async (file: File): Promise<string | undefined> => {
+    return new Promise((resolve) => {
+      const exifCallback = function(this: any) {
+        const exifDate = EXIF.getTag(this, 'DateTimeOriginal');
+        if (exifDate) {
+          // Convert EXIF date format to ISO string
+          const [date, time] = exifDate.split(' ');
+          const [year, month, day] = date.split(':');
+          resolve(`${year}-${month}-${day}`);
+        } else {
+          resolve(undefined);
+        }
+      };
+      EXIF.getData(file as any, exifCallback as any);
+    });
+  };
+
+  const extractLocation = async (file: File): Promise<Location | undefined> => {
+    return new Promise((resolve) => {
+      const exifCallback = function(this: any) {
+        const lat = EXIF.getTag(this, 'GPSLatitude');
+        const lon = EXIF.getTag(this, 'GPSLongitude');
+        const latRef = EXIF.getTag(this, 'GPSLatitudeRef');
+        const lonRef = EXIF.getTag(this, 'GPSLongitudeRef');
+
+        if (lat && lon && latRef && lonRef) {
+          // Convert GPS coordinates to decimal
+          const latitude = convertDMSToDD(lat, latRef);
+          const longitude = convertDMSToDD(lon, lonRef);
+          if (!isNaN(latitude) && !isNaN(longitude)) {
+            resolve({ lat: latitude, lon: longitude });
+          } else {
+            resolve(undefined);
+          }
+        } else {
+          resolve(undefined);
+        }
+      };
+      EXIF.getData(file as any, exifCallback as any);
+    });
+  };
+
+  const convertDMSToDD = (dms: number[], ref: string): number => {
+    if (!dms || dms.length !== 3) return NaN;
+    const degrees = dms[0];
+    const minutes = dms[1];
+    const seconds = dms[2];
+    let dd = degrees + minutes / 60 + seconds / 3600;
+    if (ref === 'S' || ref === 'W') dd = -dd;
+    return dd;
   };
 
   // Handle OCR

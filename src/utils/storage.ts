@@ -1,22 +1,17 @@
-import { PostalItem, PostalItemGroup } from '../types';
+import { PhotoItem, PostalItemGroup, StorageData } from '../types';
 
-const STORAGE_KEY = 'postal-snap-items';
+const STORAGE_KEY = 'postal_snap_data';
 const GROUP_STORAGE_KEY = 'postal-snap-groups';
 
-export const saveItems = (items: PostalItem[]): void => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch (e) {
-    alert('保存に失敗しました（容量制限の可能性があります）');
-    console.error('localStorage save error:', e);
-  }
+export const saveItems = (items: PhotoItem[]): void => {
+  const data = loadStorageData();
+  data.items = items;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
 
-export const loadItems = (): PostalItem[] => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return [];
-  
-  return JSON.parse(stored).map((item: any) => ({
+export const loadItems = (): PhotoItem[] => {
+  const data = loadStorageData();
+  return data.items.map(item => ({
     ...item,
     createdAt: new Date(item.createdAt),
     updatedAt: new Date(item.updatedAt)
@@ -24,35 +19,31 @@ export const loadItems = (): PostalItem[] => {
 };
 
 export const saveGroups = (groups: PostalItemGroup[]): void => {
-  try {
-    localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groups));
-  } catch (e) {
-    alert('保存に失敗しました（容量制限の可能性があります）');
-    console.error('localStorage save error:', e);
-  }
+  const data = loadStorageData();
+  data.groups = groups;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
 
 export const loadGroups = (): PostalItemGroup[] => {
-  const stored = localStorage.getItem(GROUP_STORAGE_KEY);
-  if (!stored) return [];
-  
-  return JSON.parse(stored).map((group: any) => ({
+  const data = loadStorageData();
+  return data.groups.map(group => ({
     ...group,
     createdAt: new Date(group.createdAt),
     updatedAt: new Date(group.updatedAt)
   }));
 };
 
+const loadStorageData = (): StorageData => {
+  const storedData = localStorage.getItem(STORAGE_KEY);
+  if (!storedData) {
+    return { items: [], groups: [], tags: [] };
+  }
+  return JSON.parse(storedData);
+};
+
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
-
-// インポート/エクスポート用の統合データ型
-export interface StorageData {
-  items: PostalItem[];
-  groups: PostalItemGroup[];
-  tags: any[];
-}
 
 // 統合データの保存
 export const saveAllData = (data: StorageData): void => {

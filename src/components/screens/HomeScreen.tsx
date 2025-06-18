@@ -1,6 +1,6 @@
 import React from 'react';
 import { useMemo, useState, useEffect } from 'react';
-import { PostalItem, PostalItemGroup } from '../../types';
+import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
@@ -11,7 +11,7 @@ import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { loadImageBlob } from '../../utils/imageDB';
 
 interface HomeScreenProps {
-  items: PostalItem[];
+  items: PhotoItem[];
   groups: PostalItemGroup[];
   searchQuery: string;
   selectedTags: string[];

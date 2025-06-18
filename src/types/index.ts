@@ -1,4 +1,16 @@
-export interface PostalItem {
+export interface Location {
+  lat: number;
+  lon: number;
+}
+
+export interface PhotoMetadata {
+  dateTaken?: string;
+  location?: Location;
+  source: 'single' | 'bulk';
+  filename: string;
+}
+
+export interface PhotoItem {
   id: string;
   image: string;
   ocrText: string;
@@ -6,26 +18,8 @@ export interface PostalItem {
   memo: string;
   createdAt: Date;
   updatedAt: Date;
+  metadata: PhotoMetadata;
   groupId?: string;
-}
-
-export interface PhotoMetadata {
-  dateTime?: string;
-  gpsLatitude?: number;
-  gpsLongitude?: number;
-  make?: string;
-  model?: string;
-  orientation?: number;
-}
-
-export interface PhotoItem {
-  id: string;
-  image: string;
-  ocrText: string;
-  createdAt: Date;
-  metadata?: PhotoMetadata;
-  tags?: string[];
-  memo?: string;
 }
 
 export interface PostalItemGroup {
@@ -39,19 +33,27 @@ export interface PostalItemGroup {
 }
 
 export interface Tag {
-  id: string;
   name: string;
   color: string;
-  count: number;
 }
 
-export type Screen = 'home' | 'unified-add' | 'detail' | 'detail-group';
+// インポート/エクスポート用の統合データ型
+export interface StorageData {
+  items: PhotoItem[];
+  groups: PostalItemGroup[];
+  tags: Tag[];
+}
 
+// アプリケーションの画面状態
+export type Screen = 
+  | { type: 'home' }
+  | { type: 'detail'; itemId: string }
+  | { type: 'detail-group'; groupId: string }
+  | { type: 'add'; mode: 'unified' };
+
+// アプリケーションの状態
 export interface AppState {
-  currentScreen: Screen;
-  selectedItemId: string | null;
-  searchQuery: string;
-  selectedTags: string[];
+  screen: Screen;
 }
 
 export interface HomeScreenProps {
