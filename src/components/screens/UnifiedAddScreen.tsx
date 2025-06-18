@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff, X, Info } from 'lucide-react';
+import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff, X, Info, RotateCw, RotateCcw } from 'lucide-react';
 import { TagChip } from '../TagChip';
 import { PhotoItem, PostalItemGroup, PhotoMetadata, Location } from '../../types';
 import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/ocr';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
-import { resizeImage } from '../../utils/imageResize';
+import { resizeImage, resizeImageWithOrientation } from '../../utils/imageResize';
 import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
 import init, { preprocess_image_color } from '../../pkg/your_wasm_pkg';
@@ -17,9 +17,14 @@ interface UnifiedAddScreenProps {
 
 type OcrMode = 'disabled' | 'tesseract' | 'google-cloud';
 
+// PhotoItemにrotationを持たせる
+interface PhotoItemWithRotation extends PhotoItem {
+  rotation?: number; // 0, 90, 180, 270
+}
+
 export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBack }) => {
   // State for both single and multiple photos
-  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [photos, setPhotos] = useState<PhotoItemWithRotation[]>([]);
   const [title, setTitle] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [memo, setMemo] = useState('');
@@ -66,40 +71,78 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
     })();
   }, [photos]);
 
+  // 画像回転用関数
+  const rotatePhoto = (photoId: string, direction: 'left' | 'right') => {
+    setPhotos(prev => prev.map(photo => {
+      if (photo.id !== photoId) return photo;
+      let newRotation = (photo.rotation || 0) + (direction === 'right' ? 90 : -90);
+      newRotation = ((newRotation % 360) + 360) % 360; // 0,90,180,270
+      return { ...photo, rotation: newRotation };
+    }));
+  };
+
+  // 画像回転をcanvasで適用する関数
+  const applyRotationToBase64 = async (base64: string, rotation: number): Promise<string> => {
+    if (!rotation || rotation % 360 === 0) return base64;
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('No ctx');
+        if (rotation % 180 === 0) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        } else {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        }
+        ctx.save();
+        switch (rotation) {
+          case 90:
+            ctx.translate(canvas.width, 0);
+            ctx.rotate(Math.PI / 2);
+            break;
+          case 180:
+            ctx.translate(canvas.width, canvas.height);
+            ctx.rotate(Math.PI);
+            break;
+          case 270:
+            ctx.translate(0, canvas.height);
+            ctx.rotate(-Math.PI / 2);
+            break;
+        }
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
+        resolve(canvas.toDataURL('image/jpeg'));
+      };
+      img.onerror = reject;
+      img.src = base64;
+    });
+  };
+
   // Handle file selection
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files?.length) return;
-    
     setIsProcessing(true);
     setSaveError(null);
-
     try {
-      const newPhotos: PhotoItem[] = [];
-      
+      const newPhotos: PhotoItemWithRotation[] = [];
       for (const file of Array.from(event.target.files)) {
         try {
           // Generate unique ID
           const id = generateId();
           console.log(`Processing image: ${file.name}, size: ${file.size} bytes`);
-          
-          // Convert File to base64
-          const base64Image = await imageToDataURL(file);
-          console.log('File converted to base64');
-          
-          // リサイズ処理
-          const resizedBase64 = await resizeImage(base64Image);
-          console.log('Image resized successfully');
-          
+          // 向き補正＋リサイズ
+          const resizedBase64 = await resizeImageWithOrientation(file);
+          console.log('Image resized (with orientation) successfully');
           // Base64からBlobに変換
           const response = await fetch(resizedBase64);
           if (!response.ok) throw new Error('Failed to create blob from resized image');
-          
           const resizedBlob = await response.blob();
           console.log(`Resized blob created, size: ${resizedBlob.size} bytes`);
-          
           await saveImageBlob(id, resizedBlob);
           console.log('Image blob saved successfully');
-
           // Extract metadata
           const metadata: PhotoMetadata = {
             filename: file.name,
@@ -107,9 +150,8 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
             dateTaken: await extractDateTaken(file),
             location: await extractLocation(file),
           };
-
           // Create photo item
-          const photo: PhotoItem = {
+          const photo: PhotoItemWithRotation = {
             id,
             image: id,
             ocrText: '',
@@ -117,9 +159,9 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
             updatedAt: new Date(),
             metadata,
             tags: [],
-            memo: ''
+            memo: '',
+            rotation: 0,
           };
-
           newPhotos.push(photo);
           console.log(`Photo item created successfully: ${id}`);
         } catch (error) {
@@ -127,7 +169,6 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
           throw new Error(`画像「${file.name}」の処理に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
         }
       }
-
       if (newPhotos.length > 0) {
         setPhotos(prev => [...prev, ...newPhotos]);
         console.log(`${newPhotos.length} photos processed successfully`);
@@ -254,14 +295,27 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       setSaveError('少なくとも1枚の写真が必要です');
       return;
     }
-
     setIsSaving(true);
     setSaveError(null);
-
     try {
-      if (photos.length === 1) {
+      // 回転を反映した画像で保存
+      const processedPhotos: PhotoItem[] = [];
+      for (const photo of photos) {
+        let base64 = await loadImageBlob(photo.image).then(blob => blobToBase64(blob!));
+        if (photo.rotation && photo.rotation % 360 !== 0) {
+          base64 = await applyRotationToBase64(base64, photo.rotation);
+        }
+        // 保存用blob生成
+        const response = await fetch(base64);
+        const rotatedBlob = await response.blob();
+        await saveImageBlob(photo.id, rotatedBlob);
+        // rotationを除外して保存
+        const { rotation, ...photoWithoutRotation } = photo;
+        processedPhotos.push(photoWithoutRotation);
+      }
+      if (processedPhotos.length === 1) {
         // Single photo mode
-        const photo = photos[0];
+        const photo = processedPhotos[0];
         onSave({
           ...photo,
           tags: selectedTags,
@@ -273,7 +327,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         const group: PostalItemGroup = {
           id: generateId(),
           title: title || `写真グループ ${new Date().toLocaleDateString()}`,
-          photos,
+          photos: processedPhotos,
           tags: selectedTags,
           memo,
           createdAt: new Date(),
@@ -281,7 +335,6 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         };
         onSave(group);
       }
-
       setShowSaved(true);
       setTimeout(() => {
         setShowSaved(false);
@@ -451,12 +504,29 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
           {photos.length > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-2">
               {photos.map((photo) => (
-                <div key={photo.id} className="relative">
+                <div key={photo.id} className="relative group">
                   <img
                     src={imageUrlMap[photo.image] || ''}
                     alt="プレビュー"
                     className="w-full h-40 object-contain rounded"
+                    style={{ transform: `rotate(${photo.rotation || 0}deg)` }}
                   />
+                  <div className="absolute bottom-1 left-1 flex gap-1 opacity-80 group-hover:opacity-100">
+                    <button
+                      type="button"
+                      className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                      onClick={() => rotatePhoto(photo.id, 'left')}
+                    >
+                      <RotateCcw className="h-4 w-4 text-gray-700" />
+                    </button>
+                    <button
+                      type="button"
+                      className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                      onClick={() => rotatePhoto(photo.id, 'right')}
+                    >
+                      <RotateCw className="h-4 w-4 text-gray-700" />
+                    </button>
+                  </div>
                   <button
                     onClick={() => removePhoto(photo.id)}
                     className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"

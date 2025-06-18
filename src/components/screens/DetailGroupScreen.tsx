@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { PostalItemGroup, PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2 } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
-import { loadImageBlob } from '../../utils/imageDB';
+import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareGroup } from '../../utils/share';
 
 interface DetailGroupScreenProps {
@@ -13,6 +13,11 @@ interface DetailGroupScreenProps {
   onBack: () => void;
   onUpdate: (updates: Partial<PostalItemGroup>) => void;
   onDelete: () => void;
+}
+
+// PhotoItemにrotationを持たせる
+interface PhotoItemWithRotation extends PhotoItem {
+  rotation?: number; // 0, 90, 180, 270
 }
 
 export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
@@ -25,13 +30,14 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const [editedTitle, setEditedTitle] = useState(group.title);
   const [editedMemo, setEditedMemo] = useState(group.memo);
   const [editedTags, setEditedTags] = useState<string[]>(group.tags);
-  const [editedPhotos, setEditedPhotos] = useState<PhotoItem[]>(group.photos);
+  const [editedPhotos, setEditedPhotos] = useState<PhotoItemWithRotation[]>(group.photos);
   const [isSharing, setIsSharing] = useState(false);
   const [availableTags, setAvailableTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
   });
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
+  const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
 
   // タグリストを更新
   useEffect(() => {
@@ -45,12 +51,27 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     (async () => {
       const map: Record<string, string> = {};
       for (const photo of editedPhotos) {
-        if (photo.image && !imageUrlMap[photo.image]) {
+        let base64 = photo.image;
+        // base64でなければBlobからbase64化
+        if (!base64.startsWith('data:') && !base64.startsWith('blob:')) {
           const blob = await loadImageBlob(photo.image);
-          if (blob) map[photo.image] = URL.createObjectURL(blob);
+          if (blob) {
+            base64 = await blobToBase64(blob);
+          } else {
+            map[photo.id] = '';
+            continue;
+          }
+        } else if (base64.startsWith('blob:')) {
+          const blob = await fetch(base64).then(r => r.blob());
+          base64 = await blobToBase64(blob);
         }
+        // 回転
+        if (photo.rotation && photo.rotation % 360 !== 0) {
+          base64 = await applyRotationToBase64(base64, photo.rotation);
+        }
+        map[photo.id] = base64;
       }
-      setImageUrlMap(map);
+      setRotatedImageUrlMap(map);
     })();
   }, [editedPhotos]);
 
@@ -65,12 +86,82 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     }).format(date);
   };
 
-  const handleSave = () => {
+  // 画像回転用関数
+  const rotatePhoto = (photoId: string, direction: 'left' | 'right') => {
+    setEditedPhotos(prev => prev.map(photo => {
+      if (photo.id !== photoId) return photo;
+      let newRotation = (photo.rotation || 0) + (direction === 'right' ? 90 : -90);
+      newRotation = ((newRotation % 360) + 360) % 360; // 0,90,180,270
+      return { ...photo, rotation: newRotation };
+    }));
+  };
+
+  // 画像回転をcanvasで適用する関数
+  const applyRotationToBase64 = async (base64: string, rotation: number): Promise<string> => {
+    if (!rotation || rotation % 360 === 0) return base64;
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('No ctx');
+        if (rotation % 180 === 0) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        } else {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        }
+        ctx.save();
+        switch (rotation) {
+          case 90:
+            ctx.translate(canvas.width, 0);
+            ctx.rotate(Math.PI / 2);
+            break;
+          case 180:
+            ctx.translate(canvas.width, canvas.height);
+            ctx.rotate(Math.PI);
+            break;
+          case 270:
+            ctx.translate(0, canvas.height);
+            ctx.rotate(-Math.PI / 2);
+            break;
+        }
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
+        resolve(canvas.toDataURL('image/jpeg'));
+      };
+      img.onerror = reject;
+      img.src = base64;
+    });
+  };
+
+  // Utility function
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  // 保存時に回転を反映
+  const handleSave = async () => {
+    const processedPhotos: PhotoItem[] = [];
+    for (const photo of editedPhotos) {
+      const base64 = rotatedImageUrlMap[photo.id] || photo.image;
+      const response = await fetch(base64);
+      const rotatedBlob = await response.blob();
+      await saveImageBlob(photo.id, rotatedBlob);
+      const { rotation, ...photoWithoutRotation } = photo;
+      processedPhotos.push(photoWithoutRotation);
+    }
     onUpdate({
       title: editedTitle,
       memo: editedMemo,
       tags: editedTags,
-      photos: editedPhotos,
+      photos: processedPhotos,
       updatedAt: new Date()
     });
     setIsEditing(false);
@@ -101,18 +192,26 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const handleAddPhoto = async (file: File) => {
     try {
       const imageDataURL = await imageToDataURL(file);
-      const resizedImage = await resizeImage(dataURLtoFile(imageDataURL, 'image.jpg'), 1000, 1000);
+      const resizedImage = await resizeImage(imageDataURL, 1000, 1000);
+      const blob = await (await fetch(resizedImage)).blob();
       const reader = new FileReader();
       reader.onload = () => {
         const newPhoto: PhotoItem = {
           id: generateId(),
           image: reader.result as string,
           ocrText: '',
-          createdAt: new Date()
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          tags: [],
+          memo: '',
+          metadata: {
+            filename: file.name,
+            source: 'bulk',
+          },
         };
         setEditedPhotos(prev => [...prev, newPhoto]);
       };
-      reader.readAsDataURL(resizedImage);
+      reader.readAsDataURL(blob);
     } catch (error) {
       console.error('写真の追加に失敗しました:', error);
       alert('写真の追加に失敗しました');
@@ -259,19 +358,37 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
           </div>
           <div className="grid grid-cols-3 gap-2">
             {editedPhotos.map((photo) => (
-              <div key={photo.id} className="relative">
+              <div key={photo.id} className="relative group">
                 <img
-                  src={imageUrlMap[photo.image] || ''}
-                  alt=""
+                  src={rotatedImageUrlMap[photo.id] || ''}
+                  alt="プレビュー"
                   className="w-full h-24 object-contain rounded"
                 />
                 {isEditing && (
-                  <button
-                    onClick={() => handleRemovePhoto(photo.id)}
-                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <>
+                    <div className="absolute bottom-1 left-1 flex gap-1 opacity-80 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                        onClick={() => rotatePhoto(photo.id, 'left')}
+                      >
+                        <RotateCcw className="h-4 w-4 text-gray-700" />
+                      </button>
+                      <button
+                        type="button"
+                        className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                        onClick={() => rotatePhoto(photo.id, 'right')}
+                      >
+                        <RotateCw className="h-4 w-4 text-gray-700" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => handleRemovePhoto(photo.id)}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
                 )}
               </div>
             ))}

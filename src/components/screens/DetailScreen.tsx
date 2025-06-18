@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2 } from 'lucide-react';
-import { loadImageBlob } from '../../utils/imageDB';
+import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2, RotateCw, RotateCcw } from 'lucide-react';
+import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareItem } from '../../utils/share';
 
 interface DetailScreenProps {
@@ -12,10 +12,25 @@ interface DetailScreenProps {
   onDelete?: () => void;
 }
 
+// PhotoItemにrotationを持たせる
+interface PhotoItemWithRotation extends PhotoItem {
+  rotation?: number; // 0, 90, 180, 270
+}
+
 const getTagColor = (tagName: string) => {
   const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
   const found = tags.find((t: any) => t.name === tagName);
   return found ? found.color : '#ccc';
+};
+
+// Utility function
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 };
 
 export const DetailScreen: React.FC<DetailScreenProps> = ({
@@ -35,6 +50,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     return saved ? JSON.parse(saved) : [];
   });
   const [imageUrl, setImageUrl] = useState<string>('');
+  const [rotation, setRotation] = useState<number>(0);
 
   // タグリストを更新
   useEffect(() => {
@@ -63,7 +79,69 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     }).format(date);
   };
 
-  const handleSave = () => {
+  // 画像回転をcanvasで適用する関数
+  const applyRotationToBase64 = async (base64: string, rotation: number): Promise<string> => {
+    if (!rotation || rotation % 360 === 0) return base64;
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('No ctx');
+        if (rotation % 180 === 0) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        } else {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        }
+        ctx.save();
+        switch (rotation) {
+          case 90:
+            ctx.translate(canvas.width, 0);
+            ctx.rotate(Math.PI / 2);
+            break;
+          case 180:
+            ctx.translate(canvas.width, canvas.height);
+            ctx.rotate(Math.PI);
+            break;
+          case 270:
+            ctx.translate(0, canvas.height);
+            ctx.rotate(-Math.PI / 2);
+            break;
+        }
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
+        resolve(canvas.toDataURL('image/jpeg'));
+      };
+      img.onerror = reject;
+      img.src = base64;
+    });
+  };
+
+  // 画像回転UI
+  const handleRotate = (direction: 'left' | 'right') => {
+    setRotation(prev => {
+      let newRotation = prev + (direction === 'right' ? 90 : -90);
+      newRotation = ((newRotation % 360) + 360) % 360;
+      return newRotation;
+    });
+  };
+
+  // 保存時に回転を反映
+  const handleSave = async () => {
+    let base64 = '';
+    if (item.image) {
+      const blob = await loadImageBlob(item.image);
+      base64 = await blobToBase64(blob!);
+      if (rotation && rotation % 360 !== 0) {
+        base64 = await applyRotationToBase64(base64, rotation);
+        // 保存用blob生成
+        const response = await fetch(base64);
+        const rotatedBlob = await response.blob();
+        await loadImageBlob(item.image).then(() => saveImageBlob(item.id, rotatedBlob));
+      }
+    }
     onUpdate({
       ocrText: editedOcrText,
       memo: editedMemo,
@@ -196,12 +274,32 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         {/* Image */}
         <div className="bg-white rounded-xl overflow-hidden shadow-sm flex justify-center items-center" style={{ minHeight: 180, maxHeight: 320 }}>
-          <img
-            src={imageUrl || ''}
-            alt="撮影画像"
-            className="object-contain"
-            style={{ maxWidth: '100%', maxHeight: '320px', width: 'auto', height: 'auto' }}
-          />
+          <div className="flex justify-center items-center mb-4 relative group">
+            <img
+              src={imageUrl}
+              alt="撮影画像"
+              className="object-contain"
+              style={{ maxWidth: '100%', maxHeight: '320px', width: 'auto', height: 'auto', transform: `rotate(${rotation}deg)` }}
+            />
+            {isEditing && (
+              <div className="absolute bottom-2 left-2 flex gap-1 opacity-80 group-hover:opacity-100">
+                <button
+                  type="button"
+                  className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                  onClick={() => handleRotate('left')}
+                >
+                  <RotateCcw className="h-4 w-4 text-gray-700" />
+                </button>
+                <button
+                  type="button"
+                  className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                  onClick={() => handleRotate('right')}
+                >
+                  <RotateCw className="h-4 w-4 text-gray-700" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Date Info */}
