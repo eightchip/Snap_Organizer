@@ -1,4 +1,5 @@
 import init, { resize_image, preprocess_image_for_ocr } from '../../your-wasm-pkg/pkg';
+import EXIF from 'exif-js';
 
 declare module '../../your-wasm-pkg/pkg' {
   export function resize_image(base64_image: string, max_width: number, max_height: number, quality: number): Promise<string>;
@@ -106,4 +107,47 @@ export async function preprocessImageForOcr(base64Image: string): Promise<string
     }
     throw new Error('OCR前処理に失敗しました');
   }
-} 
+}
+
+const adjustImageOrientation = (file) => {
+  return new Promise((resolve, reject) => {
+    EXIF.getData(file, function() {
+      const orientation = EXIF.getTag(this, 'Orientation');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get 2D context'));
+        return;
+      }
+      const img = new Image();
+
+      img.onload = () => {
+        // Set canvas dimensions
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        // Rotate image based on orientation
+        switch (orientation) {
+          case 3:
+            ctx.rotate(Math.PI);
+            ctx.drawImage(img, -img.width, -img.height);
+            break;
+          case 6:
+            ctx.rotate(Math.PI / 2);
+            ctx.drawImage(img, 0, -img.height);
+            break;
+          case 8:
+            ctx.rotate(-Math.PI / 2);
+            ctx.drawImage(img, -img.width, 0);
+            break;
+          default:
+            ctx.drawImage(img, 0, 0);
+        }
+
+        resolve(canvas.toDataURL());
+      };
+
+      img.src = URL.createObjectURL(file);
+    });
+  });
+}; 
