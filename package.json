@@ -8,7 +8,7 @@
     "build:wasm": "cd your-wasm-pkg && wasm-pack build --target web",
     "lint": "eslint .",
     "preview": "vite preview",
-    "postinstall": "node -e \"try { require('fs').chmodSync('node_modules/.bin/vite', '755') } catch (e) { }\""
+    "postinstall": "patch-package && node -e \"try { require('fs').chmodSync('node_modules/.bin/vite', '755') } catch (e) { }\""
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
@@ -36,6 +36,7 @@
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",
     "globals": "^15.9.0",
+    "patch-package": "^8.0.0",
     "postcss": "^8.5.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
