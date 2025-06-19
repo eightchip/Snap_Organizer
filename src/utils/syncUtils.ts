@@ -139,8 +139,18 @@ export class SyncManager {
   // 高度なデータ圧縮
   private async compressDataAdvanced(syncData: SyncData): Promise<string> {
     try {
-      if (!syncData || !syncData.data) {
-        throw new Error('同期データが不正です');
+      // データの存在チェックと構造の検証
+      if (!syncData) {
+        throw new Error('同期データがありません');
+      }
+      if (!syncData.version || !syncData.timestamp || !syncData.deviceId) {
+        throw new Error('同期データの基本情報が不足しています');
+      }
+      if (!syncData.data || typeof syncData.data !== 'object') {
+        throw new Error('同期データの内容が不正です');
+      }
+      if (!Array.isArray(syncData.data.items) || !Array.isArray(syncData.data.groups)) {
+        throw new Error('items または groups が配列ではありません');
       }
 
       // 1. データを短縮名で再構成
@@ -149,37 +159,54 @@ export class SyncManager {
         ts: syncData.timestamp,
         did: syncData.deviceId,
         d: {
-          i: (syncData.data.items || []).map(item => ({
-            i: item.id,
-            t: item.tags,
-            m: item.memo,
-            c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
-            u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
-          })),
-          g: (syncData.data.groups || []).map(group => ({
-            i: group.id,
-            t: group.title,
-            g: group.tags,
-            m: group.memo,
-            c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
-            u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
-            p: group.photos.map(photo => ({
-              i: photo.id,
-              t: photo.tags,
-              m: photo.memo
-            }))
-          })),
-          t: syncData.data.tags
-        },
-        c: syncData.checksum
+          i: syncData.data.items.map(item => {
+            if (!item.id || !item.createdAt || !item.updatedAt) {
+              throw new Error('アイテムデータが不正です: ' + JSON.stringify(item));
+            }
+            return {
+              i: item.id,
+              t: item.tags || [],
+              m: item.memo || '',
+              c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
+              u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
+            };
+          }),
+          g: syncData.data.groups.map(group => {
+            if (!group.id || !group.createdAt || !group.updatedAt || !Array.isArray(group.photos)) {
+              throw new Error('グループデータが不正です: ' + JSON.stringify(group));
+            }
+            return {
+              i: group.id,
+              t: group.title || '',
+              m: group.memo || '',
+              tg: group.tags || [],
+              c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
+              u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
+              p: group.photos.map(photo => {
+                if (!photo.id || !photo.createdAt || !photo.updatedAt) {
+                  throw new Error('写真データが不正です: ' + JSON.stringify(photo));
+                }
+                return {
+                  i: photo.id,
+                  t: photo.tags || [],
+                  m: photo.memo || '',
+                  c: photo.createdAt instanceof Date ? photo.createdAt.getTime() : new Date(photo.createdAt).getTime(),
+                  u: photo.updatedAt instanceof Date ? photo.updatedAt.getTime() : new Date(photo.updatedAt).getTime()
+                };
+              })
+            };
+          })
+        }
       };
+
       // 2. JSON文字列化
-      const minified = JSON.stringify(minimalData);
+      const jsonStr = JSON.stringify(minimalData);
+
       // 3. Base64エンコード（1回のみ）
-      return btoa(minified).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      return btoa(jsonStr);
     } catch (error) {
       console.error('データ圧縮エラー:', error);
-      throw new Error('データの圧縮に失敗しました');
+      throw error instanceof Error ? error : new Error('データの圧縮に失敗しました');
     }
   }
 
