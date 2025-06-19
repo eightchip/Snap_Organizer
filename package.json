@@ -13,6 +13,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
     "@types/leaflet": "^1.9.18",
+    "@types/pako": "^2.0.3",
     "@types/qrcode": "^1.5.5",
     "exif-js": "^2.3.0",
     "git-filter-repo": "^0.0.30",
@@ -20,6 +21,7 @@
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.344.0",
+    "pako": "^2.1.0",
     "qrcode": "^1.5.4",
     "qrcode.react": "^3.2.0",
     "react": "^18.3.1",

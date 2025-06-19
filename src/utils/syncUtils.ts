@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import pako from 'pako';
 
 export interface SyncData {
   version: string;
@@ -176,20 +177,20 @@ export class SyncManager {
       // 3. 文字列に変換（空白を除去）
       const jsonStr = JSON.stringify(minimalData).replace(/\s+/g, '');
 
-      // 4. LZ圧縮
-      const compressedStr = this.lzStringCompress(jsonStr);
+      // 4. UTF-8バイト配列に変換
+      const utf8Bytes = new TextEncoder().encode(jsonStr);
 
-      // 5. UTF-8バイト配列に変換
-      const utf8Bytes = new TextEncoder().encode(compressedStr);
+      // 5. データを圧縮
+      const compressedData = pako.deflate(utf8Bytes);
       
       // 6. Base64エンコード
-      const base64Data = btoa(String.fromCharCode.apply(null, utf8Bytes));
+      const base64Data = btoa(String.fromCharCode.apply(null, compressedData));
 
       // 7. サイズ情報を記録
       this.compressionInfo = {
-        originalSize: JSON.stringify(syncData).length,
+        originalSize: jsonStr.length,
         compressedSize: base64Data.length,
-        format: 'lz-utf8-base64'
+        format: 'deflate-base64'
       };
 
       return base64Data;
@@ -410,17 +411,13 @@ export class SyncManager {
       }
 
       // Base64デコード
-      const binaryStr = atob(combinedData);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
+      const compressedData = new Uint8Array(atob(combinedData).split('').map(c => c.charCodeAt(0)));
+
+      // データを解凍
+      const decompressedData = pako.inflate(compressedData);
 
       // UTF-8デコード
-      const decodedStr = new TextDecoder().decode(bytes);
-
-      // LZ解凍
-      const jsonStr = this.lzStringDecompress(decodedStr);
+      const jsonStr = new TextDecoder().decode(decompressedData);
 
       // JSONパース
       return this.expandSyncData(JSON.parse(jsonStr));
