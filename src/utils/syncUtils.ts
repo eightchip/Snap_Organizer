@@ -103,22 +103,22 @@ export class SyncManager {
     const minimalData = {
       i: items.map(item => ({
         i: item.id,
-        t: item.tags,
-        m: item.memo,
+        t: item.tags || [],
+        m: item.memo || '',
         c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
         u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
       })),
       g: groups.map(group => ({
         i: group.id,
-        t: group.title,
-        g: group.tags,
-        m: group.memo,
+        t: group.title || '',
+        g: group.tags || [],
+        m: group.memo || '',
         c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
         u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
         p: group.photos.map(photo => ({
           i: photo.id,
-          t: photo.tags,
-          m: photo.memo
+          t: photo.tags || [],
+          m: photo.memo || ''
         }))
       })),
       t: tags
@@ -248,6 +248,7 @@ export class SyncManager {
           color: { dark: '#000000', light: '#FFFFFF' }
         });
       }));
+      console.log('Generating QR codes with data:', syncData);
       return qrCodes;
     } catch (error) {
       console.error('QRコード生成エラー:', error);
