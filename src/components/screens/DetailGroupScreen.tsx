@@ -449,16 +449,16 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
                           }}
                         >
                           {isEditing && (
-                            <div className="flex justify-center pt-1">
-                              <GripVertical className="h-5 w-5 text-gray-600 cursor-grab active:cursor-grabbing" />
+                            <div className="absolute top-0 left-0 right-0 h-6 flex justify-center items-center bg-gray-100/80 rounded-t-lg cursor-grab active:cursor-grabbing">
+                              <GripVertical className="h-4 w-4 text-gray-600" />
                             </div>
                           )}
                           <img
                             src={rotatedImageUrlMap[photo.id] || ''}
                             alt="プレビュー"
-                            className={`w-full h-[100px] object-contain rounded-lg border-2 ${
+                            className={`w-full h-[100px] object-contain rounded-lg border-2 mt-6 ${
                               snapshot.isDragging 
-                                ? 'border-blue-500 shadow-lg' 
+                                ? 'border-blue-500 shadow-lg bg-blue-50'
                                 : isEditing 
                                   ? 'border-gray-200'
                                   : 'border-transparent'
