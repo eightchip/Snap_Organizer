@@ -4,12 +4,15 @@ import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { resolve } from 'path';
 
+// WASMファイルが存在するかチェック
+const wasmExists = require('fs').existsSync('./your-wasm-pkg/pkg/your_wasm_pkg.js');
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    wasm(),
-    topLevelAwait()
+    // WASMファイルが存在する場合のみプラグインを有効化
+    ...(wasmExists ? [wasm(), topLevelAwait()] : [])
   ],
   resolve: {
     alias: {
@@ -17,7 +20,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['your_wasm_pkg']
+    exclude: wasmExists ? ['your_wasm_pkg'] : []
   },
   server: {
     headers: {
@@ -34,11 +37,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-      },
-      output: {
-        manualChunks: {
-          wasm: ['./your-wasm-pkg/pkg/your_wasm_pkg.js'],
-        },
       },
     },
   }
