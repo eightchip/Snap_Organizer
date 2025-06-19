@@ -218,7 +218,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Combine items and groups into a single list for display
   const { filteredItems, filteredGroups, tagCounts } = useMemo(() => {
     // Filter items
-    const filteredItems = items.filter(item => {
+    const filteredItems = (items || []).filter(item => {
       const matchesSearch = item.ocrText.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.memo.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => item.tags.includes(tag));
@@ -232,7 +232,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     });
 
     // Filter groups
-    const filteredGroups = groups.filter(group => {
+    const filteredGroups = (groups || []).filter(group => {
       const matchesSearch = group.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         group.memo.toLowerCase().includes(searchQuery.toLowerCase()) ||
         group.photos.some(photo => photo.ocrText.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -248,12 +248,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
     // Count tags from both items and groups
     const counts = Object.fromEntries([]);
-    items.forEach(item => {
+    (items || []).forEach(item => {
       item.tags.forEach(tag => {
         counts[tag] = (counts[tag] || 0) + 1;
       });
     });
-    groups.forEach(group => {
+    (groups || []).forEach(group => {
       group.tags.forEach(tag => {
         counts[tag] = (counts[tag] || 0) + 1;
       });

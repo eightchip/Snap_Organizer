@@ -1,7 +1,7 @@
 {
   "name": "Snap Organizer",
-  "short_name": "Snap",
-  "description": "写真を整理・管理するアプリ",
+  "short_name": "SnapOrg",
+  "description": "写真の整理・管理アプリ",
   "theme_color": "#3b82f6",
   "background_color": "#ffffff",
   "display": "standalone",
@@ -9,9 +9,10 @@
   "start_url": "/",
   "icons": [
     {
-      "src": "camera-icon.svg",
+      "src": "/camera-icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }
