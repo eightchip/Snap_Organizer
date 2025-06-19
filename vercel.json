@@ -36,5 +36,15 @@
         }
       ]
     }
+  ],
+  "routes": [
+    {
+      "src": "/manifest.json",
+      "dest": "/manifest.json",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "access-control-allow-origin": "*"
+      }
+    }
   ]
 } 

@@ -110,24 +110,38 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
 };
 
 // 統合データの読み込み
-export const loadAllData = (): StorageData => {
-  return {
-    items: loadItems(),
-    groups: loadGroups(),
-    tags: JSON.parse(localStorage.getItem('postal_tags') || '[]')
-  };
-};
-
-// アプリアイコンの保存と取得
-export const saveAppIcon = async (imageBlob: Blob) => {
+export async function loadAllData(): Promise<{ items: PhotoItem[]; groups: PostalItemGroup[] }> {
   try {
     const database = await initDB();
-    await database.put(DATA_STORE, imageBlob, 'app_icon');
+    const tx = database.transaction(DATA_STORE, 'readonly');
+    const store = tx.objectStore(DATA_STORE);
+
+    const [items, groups] = await Promise.all([
+      store.get('items') || [],
+      store.get('groups') || []
+    ]);
+
+    return {
+      items: items || [],
+      groups: groups || []
+    };
+  } catch (error) {
+    console.error('データの読み込みに失敗しました:', error);
+    return { items: [], groups: [] };
+  }
+}
+
+// アプリアイコンの保存と取得
+export async function saveAppIcon(blob: Blob): Promise<string | null> {
+  try {
+    const url = URL.createObjectURL(blob);
+    localStorage.setItem('app_icon', url);
+    return url;
   } catch (error) {
     console.error('アイコンの保存に失敗しました:', error);
-    throw error;
+    return null;
   }
-};
+}
 
 export const getAppIcon = async (): Promise<Blob | null> => {
   const database = await initDB();

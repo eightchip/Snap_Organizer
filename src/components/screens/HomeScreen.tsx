@@ -217,11 +217,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // Combine items and groups into a single list for display
   const { filteredItems, filteredGroups, tagCounts } = useMemo(() => {
+    // Ensure items and groups are arrays
+    const itemsArray = Array.isArray(items) ? items : [];
+    const groupsArray = Array.isArray(groups) ? groups : [];
+
     // Filter items
-    const filteredItems = (items || []).filter(item => {
-      const matchesSearch = item.ocrText.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.memo.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => item.tags.includes(tag));
+    const filteredItems = itemsArray.filter(item => {
+      const matchesSearch = item.ocrText?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.memo?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => item.tags?.includes(tag));
       
       // 日付フィルタリング
       const itemDate = new Date(item.createdAt);
@@ -232,11 +236,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     });
 
     // Filter groups
-    const filteredGroups = (groups || []).filter(group => {
-      const matchesSearch = group.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        group.memo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        group.photos.some(photo => photo.ocrText.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => group.tags.includes(tag));
+    const filteredGroups = groupsArray.filter(group => {
+      const matchesSearch = group.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        group.memo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        group.photos?.some(photo => photo.ocrText?.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => group.tags?.includes(tag));
       
       // 日付フィルタリング
       const groupDate = new Date(group.createdAt);
@@ -248,13 +252,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
     // Count tags from both items and groups
     const counts = Object.fromEntries([]);
-    (items || []).forEach(item => {
-      item.tags.forEach(tag => {
+    itemsArray.forEach(item => {
+      (item.tags || []).forEach(tag => {
         counts[tag] = (counts[tag] || 0) + 1;
       });
     });
-    (groups || []).forEach(group => {
-      group.tags.forEach(tag => {
+    groupsArray.forEach(group => {
+      (group.tags || []).forEach(tag => {
         counts[tag] = (counts[tag] || 0) + 1;
       });
     });
@@ -274,7 +278,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       tags,
       version: '1.0'
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -356,8 +361,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       const resizedBase64 = await resizeImage(await imageToDataURL(file), 40, 40);
       const response = await fetch(resizedBase64);
       const blob = await response.blob();
-      const iconUrl = await saveAppIcon(blob) as string;
-      setCustomIcon(iconUrl);
+      const iconUrl = await saveAppIcon(blob);
+      if (iconUrl) {
+        setCustomIcon(iconUrl);
+      }
     } catch (error) {
       console.error('アイコンの設定に失敗しました:', error);
       alert('アイコンの設定に失敗しました');
