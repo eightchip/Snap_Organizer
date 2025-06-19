@@ -1,9 +1,9 @@
-import init, { resize_image, preprocess_image_for_ocr } from '../../your-wasm-pkg/pkg';
+import init, { preprocess_image, preprocess_image_color } from '../pkg/your_wasm_pkg';
 import EXIF from 'exif-js';
 
-declare module '../../your-wasm-pkg/pkg' {
-  export function resize_image(base64_image: string, max_width: number, max_height: number, quality: number): Promise<string>;
-  export function preprocess_image_for_ocr(base64_image: string): Promise<string>;
+declare module '../pkg/your_wasm_pkg' {
+  export function preprocess_image(image_data: Uint8Array): Uint8Array;
+  export function preprocess_image_color(image_data: Uint8Array): Uint8Array;
   export default function init(): Promise<void>;
 }
 
@@ -50,6 +50,73 @@ function validateImage(base64Image: string | null | undefined): string {
   }
 }
 
+// Base64文字列をUint8Arrayに変換する関数
+function base64ToUint8Array(base64: string): Uint8Array {
+  // Base64データURLからBase64文字列を抽出
+  const base64String = base64.split(',')[1];
+  // Base64をデコード
+  const binaryString = atob(base64String);
+  // Uint8Arrayに変換
+  const array = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    array[i] = binaryString.charCodeAt(i);
+  }
+  return array;
+}
+
+// Uint8ArrayをBase64文字列に変換する関数
+function uint8ArrayToBase64(array: Uint8Array): string {
+  // Uint8ArrayをBase64に変換
+  let binary = '';
+  for (let i = 0; i < array.length; i++) {
+    binary += String.fromCharCode(array[i]);
+  }
+  const base64String = btoa(binary);
+  // データURLとして返す
+  return `data:image/jpeg;base64,${base64String}`;
+}
+
+// HTMLCanvasElementを使用して画像をリサイズする関数
+async function resizeImageWithCanvas(base64Image: string, maxWidth: number, maxHeight: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      // 新しいサイズを計算
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      // キャンバスを作成
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+
+      // 画像を描画
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // JPEG形式で出力
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = base64Image;
+  });
+}
+
 export async function resizeImage(
   base64Image: string,
   maxWidth: number = 800,
@@ -61,18 +128,25 @@ export async function resizeImage(
     const validatedImage = validateImage(base64Image);
     await initializeWasm();
 
+    // まずCanvasでリサイズ
     console.log(`Resizing image to ${maxWidth}x${maxHeight} with quality ${quality}`);
-    const result = await withTimeout(
-      Promise.resolve(resize_image(validatedImage, maxWidth, maxHeight, quality * 100)),
+    const resizedBase64 = await resizeImageWithCanvas(validatedImage, maxWidth, maxHeight, quality);
+
+    // カラー処理を適用
+    console.log('Applying color processing...');
+    const imageData = base64ToUint8Array(resizedBase64);
+    const processedData = await withTimeout(
+      Promise.resolve(preprocess_image_color(imageData)),
       PROCESSING_TIMEOUT
     );
 
-    if (!result) {
-      throw new Error('画像のリサイズに失敗しました');
+    if (!processedData) {
+      throw new Error('画像の処理に失敗しました');
     }
 
+    const resultBase64 = uint8ArrayToBase64(processedData);
     console.log('Image resize completed successfully');
-    return result;
+    return resultBase64;
   } catch (error) {
     console.error('Image resize error:', error);
     if (error instanceof Error) {
@@ -88,9 +162,12 @@ export async function preprocessImageForOcr(base64Image: string): Promise<string
     const validatedImage = validateImage(base64Image);
     await initializeWasm();
 
+    console.log('Converting base64 to Uint8Array...');
+    const imageData = base64ToUint8Array(validatedImage);
+
     console.log('Processing image for OCR...');
     const result = await withTimeout(
-      Promise.resolve(preprocess_image_for_ocr(validatedImage)),
+      Promise.resolve(preprocess_image(imageData)),
       PROCESSING_TIMEOUT
     );
 
@@ -98,8 +175,11 @@ export async function preprocessImageForOcr(base64Image: string): Promise<string
       throw new Error('OCR前処理に失敗しました');
     }
 
+    console.log('Converting result back to base64...');
+    const resultBase64 = uint8ArrayToBase64(result);
+
     console.log('OCR preprocessing completed successfully');
-    return result;
+    return resultBase64;
   } catch (error) {
     console.error('Image preprocessing error:', error);
     if (error instanceof Error) {

@@ -77,7 +77,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     setNewTagColor,
     tagEditIdx,
     tagEditName,
+    setTagEditName,
     tagEditColor,
+    setTagEditColor,
     handleAddTag,
     startEditTag,
     handleEditTag,
@@ -100,30 +102,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
 
+  // 画像URLの読み込み
   useEffect(() => {
     const loadImages = async () => {
       const newMap: Record<string, string> = {};
       const processedImages = new Set<string>();
 
-      // Helper function to load and cache image
       const loadAndCacheImage = async (imageId: string) => {
         if (!processedImages.has(imageId) && !imageUrlMap[imageId]) {
           processedImages.add(imageId);
-          const blob = await loadImageBlob(imageId);
-          if (blob) {
-            newMap[imageId] = URL.createObjectURL(blob);
+          try {
+            const blob = await loadImageBlob(imageId);
+            if (blob) {
+              newMap[imageId] = URL.createObjectURL(blob);
+            }
+          } catch (error) {
+            console.error('Failed to load image:', imageId, error);
           }
         }
       };
 
-      // Process single items
       for (const item of items) {
         if (item.image) {
           await loadAndCacheImage(item.image);
         }
       }
 
-      // Process group photos
       for (const group of groups) {
         for (const photo of group.photos) {
           if (photo.image) {
@@ -133,19 +137,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       }
 
       if (Object.keys(newMap).length > 0) {
-        setImageUrlMap(prev => ({ ...prev, ...newMap }));
+        setImageUrlMap(prev => {
+          // 古いURLを解放
+          Object.values(prev).forEach(url => {
+            if (!Object.values(newMap).includes(url)) {
+              URL.revokeObjectURL(url);
+            }
+          });
+          return { ...prev, ...newMap };
+        });
       }
     };
 
     loadImages();
 
-    // Cleanup function
     return () => {
+      // コンポーネントのアンマウント時にURLを解放
       Object.values(imageUrlMap).forEach(url => {
         URL.revokeObjectURL(url);
       });
     };
   }, [items, groups]);
+
+  // 選択状態のリセット
+  useEffect(() => {
+    if (!isSelectionMode) {
+      setSelectedItemIds([]);
+      setSelectedGroupIds([]);
+    }
+  }, [isSelectionMode]);
 
   // Combine items and groups into a single list for display
   const { filteredItems, filteredGroups, tagCounts } = useMemo(() => {
@@ -391,43 +411,132 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           ))}
         </div>
+
+        {tagEditIdx !== null && (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              value={tagEditName}
+              onChange={e => setTagEditName(e.target.value)}
+              className="border p-1 rounded w-24"
+            />
+            <input
+              type="color"
+              value={tagEditColor}
+              onChange={e => setTagEditColor(e.target.value)}
+              className="w-8 h-8 p-0 border-none"
+            />
+            <button
+              onClick={() => {
+                handleEditTag();
+                onBulkTagRename(tags[tagEditIdx].name, tagEditName.trim());
+              }}
+              className="px-2 py-1 bg-blue-500 text-white rounded"
+            >
+              保存
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              className="px-2 py-1 bg-gray-200 rounded"
+            >
+              キャンセル
+            </button>
+          </div>
+        )}
+
+        {showAddTag ? (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              value={newTagName}
+              onChange={e => setNewTagName(e.target.value)}
+              placeholder="新規タグ名"
+              className="border p-1 rounded w-24"
+            />
+            <input
+              type="color"
+              value={newTagColor}
+              onChange={e => setNewTagColor(e.target.value)}
+              className="w-8 h-8 p-0 border-none"
+            />
+            <button
+              onClick={handleAddTag}
+              className="px-2 py-1 bg-blue-500 text-white rounded"
+            >
+              追加
+            </button>
+            <button
+              onClick={() => setShowAddTag(false)}
+              className="px-2 py-1 bg-gray-200 rounded"
+            >
+              キャンセル
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowAddTag(true)}
+            className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 mt-2"
+          >
+            <Plus className="h-4 w-4" /> 新規タグ
+          </button>
+        )}
       </div>
 
-      {showAddTag ? (
-        <div className="flex items-center gap-2 mb-4">
-          <input
-            value={newTagName}
-            onChange={e => setNewTagName(e.target.value)}
-            placeholder="新規タグ名"
-            className="border p-1 rounded w-24"
-          />
-          <input
-            type="color"
-            value={newTagColor}
-            onChange={e => setNewTagColor(e.target.value)}
-            className="w-8 h-8 p-0 border-none"
-          />
-          <button
-            onClick={handleAddTag}
-            className="px-2 py-1 bg-blue-500 text-white rounded"
-          >
-            追加
-          </button>
-          <button
-            onClick={() => setShowAddTag(false)}
-            className="px-2 py-1 bg-gray-200 rounded"
-          >
-            キャンセル
-          </button>
+      {/* Header */}
+      <div className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-md mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-gray-900">スナップ一覧</h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSelectionMode(!isSelectionMode)}
+                className={`flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
+                  isSelectionMode ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'
+                }`}
+              >
+                <CheckSquare className="h-5 w-5" />
+                <span className="text-sm">
+                  {isSelectionMode ? '選択モード中' : '一括選択'}
+                </span>
+              </button>
+              {isSelectionMode && (selectedItemIds.length > 0 || selectedGroupIds.length > 0) && (
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1 px-3 py-2 hover:bg-red-100 rounded-lg transition-colors text-red-500"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  <span className="text-sm">
+                    {selectedItemIds.length + selectedGroupIds.length}件削除
+                  </span>
+                </button>
+              )}
+              <button
+                onClick={() => onAddItem('unified')}
+                className="flex items-center gap-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors text-white"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-sm">新規追加</span>
+              </button>
+            </div>
+          </div>
+          {isSelectionMode && (
+            <div className="mt-2 text-sm text-gray-600 flex items-center gap-2">
+              <span>
+                {selectedItemIds.length + selectedGroupIds.length}件選択中
+              </span>
+              {selectedItemIds.length + selectedGroupIds.length > 0 && (
+                <button
+                  onClick={() => {
+                    setSelectedItemIds([]);
+                    setSelectedGroupIds([]);
+                  }}
+                  className="text-blue-500 hover:underline"
+                >
+                  選択解除
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      ) : (
-        <button
-          onClick={() => setShowAddTag(true)}
-          className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 mb-4"
-        >
-          <Plus className="h-4 w-4" /> 新規タグ
-        </button>
-      )}
+      </div>
 
       {/* Items List */}
       <div className="max-w-md mx-auto px-4">

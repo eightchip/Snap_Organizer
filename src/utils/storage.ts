@@ -63,9 +63,9 @@ export const generateId = (): string => {
 };
 
 // 統合データの保存
-export const saveAllData = (data: StorageData): void => {
-  if (data.items) saveItems(data.items);
-  if (data.groups) saveGroups(data.groups);
+export const saveAllData = async (data: StorageData): Promise<void> => {
+  if (data.items) await saveItems(data.items);
+  if (data.groups) await saveGroups(data.groups);
   if (data.tags) localStorage.setItem('postal_tags', JSON.stringify(data.tags));
 };
 

@@ -55,7 +55,13 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
 
   // Initialize WASM
   useEffect(() => {
-    init().then(() => setWasmReady(true)).catch(console.error);
+    init().then(() => {
+      setWasmReady(true);
+      console.log('WASM initialized successfully');
+    }).catch((error) => {
+      console.error('WASM initialization failed:', error);
+      setSaveError(`WASM初期化に失敗しました: ${error.message}`);
+    });
   }, []);
 
   // Load image URLs
@@ -128,6 +134,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
     setIsProcessing(true);
     setSaveError(null);
     try {
+      console.log('Starting file processing...', { fileCount: event.target.files.length });
       const newPhotos: PhotoItemWithRotation[] = [];
       for (const file of Array.from(event.target.files)) {
         try {
@@ -299,11 +306,15 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
     setIsSaving(true);
     setSaveError(null);
     try {
+      console.log('Starting save process...', { photosCount: photos.length, selectedTags, memo });
+      
       // 回転を反映した画像で保存
       const processedPhotos: PhotoItem[] = [];
       for (const photo of photos) {
+        console.log('Processing photo:', photo.id);
         let base64 = await loadImageBlob(photo.image).then(blob => blobToBase64(blob!));
         if (photo.rotation && photo.rotation % 360 !== 0) {
+          console.log('Applying rotation:', photo.rotation);
           base64 = await applyRotationToBase64(base64, photo.rotation);
         }
         // 保存用blob生成
@@ -313,11 +324,13 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         // rotationを除外して保存
         const { rotation, ...photoWithoutRotation } = photo;
         processedPhotos.push(photoWithoutRotation);
+        console.log('Photo processed successfully:', photo.id);
       }
 
       if (processedPhotos.length === 1) {
         // Single photo mode
         const photo = processedPhotos[0];
+        console.log('Saving single photo:', photo);
         await onSave({
           ...photo,
           tags: selectedTags,
@@ -335,9 +348,11 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
           createdAt: new Date(),
           updatedAt: new Date()
         };
+        console.log('Saving group:', group);
         await onSave(group);
       }
 
+      console.log('Save completed successfully');
       // 保存成功後にデータをクリア
       setShowSaved(true);
       setTimeout(() => {
@@ -348,7 +363,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       }, 1000);
     } catch (error) {
       console.error('Save error:', error);
-      setSaveError('保存中にエラーが発生しました');
+      setSaveError(error instanceof Error ? error.message : '保存中にエラーが発生しました');
       setIsSaving(false);
     }
   };

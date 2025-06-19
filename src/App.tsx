@@ -5,7 +5,8 @@ import { HomeScreen } from './components/screens/HomeScreen';
 import { UnifiedAddScreen } from './components/screens/UnifiedAddScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
 import { DetailGroupScreen } from './components/screens/DetailGroupScreen';
-import { loadGroups, saveGroups } from './utils/storage';
+import { loadAllData, saveAllData, saveItems, saveGroups } from './utils/storage';
+import { deleteImageBlob } from './utils/imageDB';
 
 function App() {
   const {
@@ -18,7 +19,9 @@ function App() {
     getGroup,
     updateGroup,
     deleteItem,
-    deleteGroup
+    deleteGroup,
+    setItems,
+    setGroups
   } = usePostalItems();
 
   // 検索とタグフィルター用の状態
@@ -144,35 +147,66 @@ function App() {
     navigateTo({ type: 'detail-group', groupId });
   };
 
-  const handleBulkTagRename = (oldName: string, newName: string) => {
-    // アイテムのタグ更新
-    items.forEach(item => {
-      if (item.tags.includes(oldName)) {
-        const updatedTags = item.tags.map(tag => tag === oldName ? newName : tag);
-        updateItem(item.id, { tags: updatedTags });
-      }
-    });
-
-    // グループのタグ更新
-    groups.forEach(group => {
-      if (group.tags.includes(oldName)) {
-        const updatedTags = group.tags.map(tag => tag === oldName ? newName : tag);
-        updateGroup(group.id, { tags: updatedTags });
-      }
-    });
+  const handleBulkTagRename = async (oldName: string, newName: string) => {
+    setError(null);
+    try {
+      // アイテムのタグ更新
+      const updatedItems = items.map(item => ({
+        ...item,
+        tags: item.tags.map(t => t === oldName ? newName : t)
+      }));
+      // グループのタグ更新
+      const updatedGroups = groups.map(group => ({
+        ...group,
+        tags: group.tags.map(t => t === oldName ? newName : t)
+      }));
+      // 一括更新
+      await saveItems(updatedItems);
+      await saveGroups(updatedGroups);
+    } catch (error: any) {
+      setError(error.message || 'タグの更新に失敗しました');
+      console.error('Tag update error:', error);
+    }
   };
 
   const handleBulkDelete = async (itemIds: string[], groupIds: string[]) => {
     setError(null);
     try {
-      // アイテムの削除
-      for (const itemId of itemIds) {
-        await deleteItem(itemId);
+      // 削除対象の画像IDを収集
+      const imageIdsToDelete = new Set<string>();
+      
+      // 単一アイテムの画像
+      items
+        .filter(item => itemIds.includes(item.id))
+        .forEach(item => imageIdsToDelete.add(item.image));
+      
+      // グループ内の画像
+      groups
+        .filter(group => groupIds.includes(group.id))
+        .forEach(group => {
+          group.photos.forEach(photo => imageIdsToDelete.add(photo.image));
+        });
+
+      // データの削除
+      const data = loadAllData();
+      data.items = data.items.filter(item => !itemIds.includes(item.id));
+      data.groups = data.groups.filter(group => !groupIds.includes(group.id));
+      
+      // データを保存
+      await saveAllData(data);
+      
+      // 画像の削除
+      for (const imageId of imageIdsToDelete) {
+        try {
+          await deleteImageBlob(imageId);
+        } catch (error) {
+          console.error('Failed to delete image:', imageId, error);
+        }
       }
-      // グループの削除
-      for (const groupId of groupIds) {
-        await deleteGroup(groupId);
-      }
+
+      // 状態を更新
+      setItems(data.items);
+      setGroups(data.groups);
     } catch (error: any) {
       setError(error.message || '削除に失敗しました');
       console.error('Delete error:', error);
