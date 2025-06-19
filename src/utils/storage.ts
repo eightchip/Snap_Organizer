@@ -1,10 +1,19 @@
 import { PhotoItem, PostalItemGroup, StorageData } from '../types';
+import { deleteImageBlob } from './imageDB';
 
 const STORAGE_KEY = 'postal_snap_data';
 const GROUP_STORAGE_KEY = 'postal-snap-groups';
 
-export const saveItems = (items: PhotoItem[]): void => {
+export const saveItems = async (items: PhotoItem[]): Promise<void> => {
   const data = loadStorageData();
+  // 削除された画像を特定して削除
+  const oldImageIds = new Set(data.items.map(item => item.image));
+  const newImageIds = new Set(items.map(item => item.image));
+  for (const oldId of oldImageIds) {
+    if (!newImageIds.has(oldId)) {
+      await deleteImageBlob(oldId);
+    }
+  }
   data.items = items;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
@@ -18,8 +27,16 @@ export const loadItems = (): PhotoItem[] => {
   }));
 };
 
-export const saveGroups = (groups: PostalItemGroup[]): void => {
+export const saveGroups = async (groups: PostalItemGroup[]): Promise<void> => {
   const data = loadStorageData();
+  // 削除された画像を特定して削除
+  const oldImageIds = new Set(data.groups.flatMap(group => group.photos.map(photo => photo.image)));
+  const newImageIds = new Set(groups.flatMap(group => group.photos.map(photo => photo.image)));
+  for (const oldId of oldImageIds) {
+    if (!newImageIds.has(oldId)) {
+      await deleteImageBlob(oldId);
+    }
+  }
   data.groups = groups;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };

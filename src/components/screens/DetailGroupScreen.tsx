@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PostalItemGroup, PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
@@ -38,6 +38,12 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   });
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
   const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
+  const [tagEditIdx, setTagEditIdx] = useState<number|null>(null);
+  const [tagEditName, setTagEditName] = useState('');
+  const [tagEditColor, setTagEditColor] = useState('#3B82F6');
+  const [showAddTag, setShowAddTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#3B82F6');
 
   // タグリストを更新
   useEffect(() => {
@@ -183,9 +189,9 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     );
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm('このグループを削除しますか？')) {
-      onDelete();
+      await onDelete();
     }
   };
 
@@ -250,6 +256,47 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     }
     return new File([u8arr], filename, { type: mime });
   }
+
+  // タグ追加
+  const handleAddTag = () => {
+    if (!newTagName.trim()) return;
+    const newTag = { name: newTagName.trim(), color: newTagColor };
+    const updated = [...availableTags, newTag];
+    setAvailableTags(updated);
+    localStorage.setItem('postal_tags', JSON.stringify(updated));
+    setNewTagName(''); setNewTagColor('#3B82F6'); setShowAddTag(false);
+  };
+  // タグ編集開始
+  const startEditTag = (idx: number) => {
+    setTagEditIdx(idx);
+    setTagEditName(availableTags[idx].name);
+    setTagEditColor(availableTags[idx].color);
+  };
+  // タグ編集保存
+  const handleEditTag = () => {
+    if (tagEditIdx === null || !tagEditName.trim()) return;
+    const oldName = availableTags[tagEditIdx].name;
+    const newName = tagEditName.trim();
+    const updated = availableTags.map((t, i) => i === tagEditIdx ? { name: newName, color: tagEditColor } : t);
+    setAvailableTags(updated);
+    localStorage.setItem('postal_tags', JSON.stringify(updated));
+    // タグ名リネームを反映
+    setEditedTags(tags => tags.map(t => t === oldName ? newName : t));
+    setTagEditIdx(null); setTagEditName(''); setTagEditColor('#3B82F6');
+  };
+  // タグ編集キャンセル
+  const handleCancelEdit = () => {
+    setTagEditIdx(null); setTagEditName(''); setTagEditColor('#3B82F6');
+  };
+  // タグ削除
+  const handleRemoveTag = (idx: number) => {
+    if (!window.confirm('このタグを削除しますか？')) return;
+    const delName = availableTags[idx].name;
+    const updated = availableTags.filter((_, i) => i !== idx);
+    setAvailableTags(updated);
+    localStorage.setItem('postal_tags', JSON.stringify(updated));
+    setEditedTags(tags => tags.filter(t => t !== delName));
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -398,21 +445,48 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
         {/* Tags */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
-          <div className="flex flex-wrap gap-2">
-            {availableTags.map(tag => (
-              <TagChip
-                key={tag.name}
-                tag={tag.name}
-                selected={isEditing ? editedTags.includes(tag.name) : group.tags.includes(tag.name)}
-                onClick={isEditing ? () => handleTagToggle(tag.name) : undefined}
-                style={{
-                  backgroundColor: tag.color + '22',
-                  color: tag.color,
-                  cursor: isEditing ? 'pointer' : 'default'
-                }}
-              />
+          <div className="flex flex-wrap gap-2 mb-2">
+            {availableTags.map((tag, idx) => (
+              <div key={tag.name} className="flex items-center gap-1">
+                <TagChip
+                  tag={tag.name}
+                  selected={isEditing ? editedTags.includes(tag.name) : group.tags.includes(tag.name)}
+                  onClick={isEditing ? () => handleTagToggle(tag.name) : undefined}
+                  style={{ backgroundColor: tag.color + '22', color: tag.color, cursor: isEditing ? 'pointer' : 'default' }}
+                />
+                {isEditing && (
+                  <>
+                    <button onClick={() => startEditTag(idx)} className="p-1 hover:bg-gray-100 rounded"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => handleRemoveTag(idx)} className="p-1 hover:bg-red-100 rounded"><Trash2 className="h-4 w-4 text-red-500" /></button>
+                  </>
+                )}
+              </div>
             ))}
           </div>
+          {isEditing && (
+            <>
+              {tagEditIdx !== null ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <input value={tagEditName} onChange={e => setTagEditName(e.target.value)} className="border p-1 rounded w-24" />
+                  <input type="color" value={tagEditColor} onChange={e => setTagEditColor(e.target.value)} className="w-8 h-8 p-0 border-none" />
+                  <button onClick={handleEditTag} className="px-2 py-1 bg-blue-500 text-white rounded">保存</button>
+                  <button onClick={handleCancelEdit} className="px-2 py-1 bg-gray-200 rounded">キャンセル</button>
+                </div>
+              ) : null}
+              {showAddTag ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <input value={newTagName} onChange={e => setNewTagName(e.target.value)} placeholder="新規タグ名" className="border p-1 rounded w-24" />
+                  <input type="color" value={newTagColor} onChange={e => setNewTagColor(e.target.value)} className="w-8 h-8 p-0 border-none" />
+                  <button onClick={handleAddTag} className="px-2 py-1 bg-blue-500 text-white rounded">追加</button>
+                  <button onClick={() => setShowAddTag(false)} className="px-2 py-1 bg-gray-200 rounded">キャンセル</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowAddTag(true)} className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">
+                  <Plus className="h-4 w-4" /> 新規タグ
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Memo */}

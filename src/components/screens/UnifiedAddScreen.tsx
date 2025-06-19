@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff, X, Info, RotateCw, RotateCcw } from 'lucide-react';
+import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff, X, Info, RotateCw, RotateCcw, Plus } from 'lucide-react';
 import { TagChip } from '../TagChip';
 import { PhotoItem, PostalItemGroup, PhotoMetadata, Location } from '../../types';
 import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/ocr';
@@ -9,6 +9,7 @@ import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
 import init, { preprocess_image_color } from '../../pkg/your_wasm_pkg';
 import EXIF from 'exif-js';
+import { usePostalTags } from '../../hooks/usePostalTags';
 
 interface UnifiedAddScreenProps {
   onSave: (data: PhotoItem | PostalItemGroup) => void;
@@ -23,7 +24,17 @@ interface PhotoItemWithRotation extends PhotoItem {
 }
 
 export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBack }) => {
-  // State for both single and multiple photos
+  const {
+    tags,
+    showAddTag,
+    setShowAddTag,
+    newTagName,
+    setNewTagName,
+    newTagColor,
+    setNewTagColor,
+    handleAddTag
+  } = usePostalTags();
+
   const [photos, setPhotos] = useState<PhotoItemWithRotation[]>([]);
   const [title, setTitle] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -36,21 +47,11 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
   const [ocrMode, setOcrMode] = useState<OcrMode>('disabled');
   const [useCloudOcr, setUseCloudOcr] = useState(false);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
+  const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  // Tags
-  const [tags, setTags] = useState(() => {
-    const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : [
-      { name: '仕事', color: '#3B82F6' },
-      { name: '趣味', color: '#22C55E' },
-      { name: '旅行', color: '#A78BFA' },
-      { name: '郵便物', color: '#F59E42' },
-    ];
-  });
 
   // Initialize WASM
   useEffect(() => {
@@ -313,10 +314,11 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         const { rotation, ...photoWithoutRotation } = photo;
         processedPhotos.push(photoWithoutRotation);
       }
+
       if (processedPhotos.length === 1) {
         // Single photo mode
         const photo = processedPhotos[0];
-        onSave({
+        await onSave({
           ...photo,
           tags: selectedTags,
           memo,
@@ -333,13 +335,17 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
           createdAt: new Date(),
           updatedAt: new Date()
         };
-        onSave(group);
+        await onSave(group);
       }
+
+      // 保存成功後にデータをクリア
       setShowSaved(true);
       setTimeout(() => {
         setShowSaved(false);
         setIsSaving(false);
-      }, 2000);
+        // 保存成功後に画面遷移
+        onBack();
+      }, 1000);
     } catch (error) {
       console.error('Save error:', error);
       setSaveError('保存中にエラーが発生しました');
@@ -591,7 +597,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         {/* Tags */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-4">
             {tags.map(tag => (
               <TagChip
                 key={tag.name}
@@ -602,6 +608,41 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
               />
             ))}
           </div>
+          {showAddTag ? (
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                value={newTagName}
+                onChange={e => setNewTagName(e.target.value)}
+                placeholder="新規タグ名"
+                className="border p-1 rounded w-24"
+              />
+              <input
+                type="color"
+                value={newTagColor}
+                onChange={e => setNewTagColor(e.target.value)}
+                className="w-8 h-8 p-0 border-none"
+              />
+              <button
+                onClick={handleAddTag}
+                className="px-2 py-1 bg-blue-500 text-white rounded"
+              >
+                追加
+              </button>
+              <button
+                onClick={() => setShowAddTag(false)}
+                className="px-2 py-1 bg-gray-200 rounded"
+              >
+                キャンセル
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddTag(true)}
+              className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+            >
+              <Plus className="h-4 w-4" /> 新規タグ
+            </button>
+          )}
         </div>
 
         {/* Memo */}

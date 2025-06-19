@@ -16,7 +16,9 @@ function App() {
     updateItem,
     getItem,
     getGroup,
-    updateGroup
+    updateGroup,
+    deleteItem,
+    deleteGroup
   } = usePostalItems();
 
   // 検索とタグフィルター用の状態
@@ -196,6 +198,10 @@ function App() {
             item={item}
             onBack={() => navigateTo({ type: 'home' })}
             onUpdate={(updates) => handleUpdateItem(item.id, updates)}
+            onDelete={async () => {
+              await deleteItem(item.id);
+              navigateTo({ type: 'home' });
+            }}
           />
         );
 
@@ -207,8 +213,8 @@ function App() {
             group={group}
             onBack={() => navigateTo({ type: 'home' })}
             onUpdate={(updates) => updateGroup(group.id, updates)}
-            onDelete={() => {
-              updateGroup(group.id, { deleted: true });
+            onDelete={async () => {
+              await deleteGroup(group.id);
               navigateTo({ type: 'home' });
             }}
           />

@@ -87,4 +87,9 @@ export const searchByTags = async (tags: string[]): Promise<PhotoMetadata[]> => 
   return items.filter(item => 
     tags.every(tag => item.tags.includes(tag))
   );
+};
+
+export const deleteImageBlob = async (id: string): Promise<void> => {
+  const database = await initDB();
+  await database.delete(STORE_NAME, id);
 }; 

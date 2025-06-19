@@ -4,8 +4,9 @@ import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2 } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2 } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
+import { usePostalTags } from '../../hooks/usePostalTags';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { loadImageBlob } from '../../utils/imageDB';
@@ -64,31 +65,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onImport,
   onExport
 }) => {
-  // タグ管理（localStorage永続化）
-  const [tags, setTags] = useState(() => {
-    const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : COLOR_PALETTE.slice(0, 3);
-  });
-  useEffect(() => {
-    localStorage.setItem('postal_tags', JSON.stringify(tags));
-  }, [tags]);
-
-  // 新規タグ追加用state
-  const [showAddTag, setShowAddTag] = useState(false);
-  const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState(COLOR_PALETTE[0].color);
-  const [addTagError, setAddTagError] = useState('');
+  const {
+    tags,
+    showAddTag,
+    setShowAddTag,
+    newTagName,
+    setNewTagName,
+    newTagColor,
+    setNewTagColor,
+    tagEditIdx,
+    tagEditName,
+    tagEditColor,
+    handleAddTag,
+    startEditTag,
+    handleEditTag,
+    handleCancelEdit,
+    handleRemoveTag
+  } = usePostalTags();
 
   // 日付範囲検索用state
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
-  // 編集用state
-  const [editTagIdx, setEditTagIdx] = useState<number|null>(null);
-  const [editTagName, setEditTagName] = useState('');
-  const [editTagColor, setEditTagColor] = useState(COLOR_PALETTE[0].color);
-  const [editTagError, setEditTagError] = useState('');
-  const [editTagBulk, setEditTagBulk] = useState(false);
 
   const [showTagFilter, setShowTagFilter] = useState(false);
 
@@ -194,60 +191,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       tagCounts: counts
     };
   }, [items, groups, searchQuery, selectedTags, startDate, endDate]);
-
-  // タグ追加処理
-  const handleAddTag = () => {
-    const newTagName = prompt('新しいタグ名を入力してください');
-    if (!newTagName) return;
-
-    const newTag = {
-      name: newTagName,
-      color: `#${Math.floor(Math.random()*16777215).toString(16)}`
-    };
-
-    const updatedTags = [...tags, newTag];
-    setTags(updatedTags);
-    localStorage.setItem('postal_tags', JSON.stringify(updatedTags));
-  };
-
-  // 編集開始
-  const openEditTagModal = (idx: number) => {
-    setEditTagIdx(idx);
-    setEditTagName(tags[idx].name);
-    setEditTagColor(tags[idx].color);
-    setShowAddTag(false);
-  };
-  // 編集保存
-  const handleEditTag = () => {
-    setEditTagError('');
-    if (editTagIdx === null || !editTagName.trim()) return;
-    if (!editTagColor || editTagColor === COLOR_PALETTE[0].color) {
-      setEditTagError('色を選択してください');
-      return;
-    }
-    const oldName = tags[editTagIdx].name;
-    const newName = editTagName.trim();
-    setTags(tags.map((t, i) => i === editTagIdx ? { name: newName, color: editTagColor } : t));
-    if (editTagBulk && oldName !== newName) {
-      onBulkTagRename(oldName, newName);
-    }
-    setEditTagIdx(null);
-    setEditTagName('');
-    setEditTagColor(COLOR_PALETTE[0].color);
-    setEditTagBulk(false);
-  };
-  // 編集キャンセル
-  const handleCancelEdit = () => {
-    setEditTagIdx(null);
-    setEditTagName('');
-    setEditTagColor(COLOR_PALETTE[0].color);
-  };
-  // タグ削除
-  const handleRemoveTag = (idx: number) => {
-    if (window.confirm('このタグを削除しますか？')) {
-      setTags(tags.filter((_, i) => i !== idx));
-    }
-  };
 
   // エクスポート機能
   const handleExport = () => {
@@ -403,18 +346,60 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tags.map(tag => (
-            <TagChip
-              key={tag.name}
-              tag={tag.name}
-              selected={selectedTags.includes(tag.name)}
-              onClick={() => onTagToggle(tag.name)}
-              style={{ backgroundColor: tag.color + '22', color: tag.color }}
-              count={tagCounts.get(tag.name) || 0}
-            />
+          {tags.map((tag, idx) => (
+            <div key={tag.name} className="flex items-center gap-1">
+              <TagChip
+                tag={tag.name}
+                selected={selectedTags.includes(tag.name)}
+                onClick={() => onTagToggle(tag.name)}
+                style={{ backgroundColor: tag.color + '22', color: tag.color }}
+              />
+              <button onClick={() => startEditTag(idx)} className="p-1 hover:bg-gray-100 rounded">
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button onClick={() => handleRemoveTag(idx)} className="p-1 hover:bg-red-100 rounded">
+                <Trash2 className="h-4 w-4 text-red-500" />
+              </button>
+            </div>
           ))}
         </div>
       </div>
+
+      {showAddTag ? (
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            value={newTagName}
+            onChange={e => setNewTagName(e.target.value)}
+            placeholder="新規タグ名"
+            className="border p-1 rounded w-24"
+          />
+          <input
+            type="color"
+            value={newTagColor}
+            onChange={e => setNewTagColor(e.target.value)}
+            className="w-8 h-8 p-0 border-none"
+          />
+          <button
+            onClick={handleAddTag}
+            className="px-2 py-1 bg-blue-500 text-white rounded"
+          >
+            追加
+          </button>
+          <button
+            onClick={() => setShowAddTag(false)}
+            className="px-2 py-1 bg-gray-200 rounded"
+          >
+            キャンセル
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAddTag(true)}
+          className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 mb-4"
+        >
+          <Plus className="h-4 w-4" /> 新規タグ
+        </button>
+      )}
 
       {/* Items List */}
       <div className="max-w-md mx-auto px-4">

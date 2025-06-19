@@ -165,9 +165,9 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     );
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm('このアイテムを削除しますか？')) {
-      onDelete?.();
+      await onDelete?.();
     }
   };
 
