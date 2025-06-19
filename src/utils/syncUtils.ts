@@ -145,7 +145,7 @@ export class SyncManager {
         throw new Error('同期データがありません');
       }
 
-      // 2. データの最小化（さらに短いキー名を使用）
+      // 2. データの最小化（配列形式）
       const minimalData = {
         v: syncData.version,
         t: syncData.timestamp,
@@ -176,17 +176,17 @@ export class SyncManager {
       // 3. 文字列に変換（空白を除去）
       const jsonStr = JSON.stringify(minimalData).replace(/\s+/g, '');
 
-      // 4. データを圧縮
-      const compressedStr = await this.lzStringCompress(jsonStr);
-
-      // 5. Base64エンコード
-      const base64Data = btoa(compressedStr);
+      // 4. UTF-8バイト配列に変換
+      const utf8Bytes = new TextEncoder().encode(jsonStr);
+      
+      // 5. Base64エンコード（UTF-8セーフ）
+      const base64Data = this.arrayBufferToBase64(utf8Bytes);
 
       // 6. サイズ情報を記録
       this.compressionInfo = {
         originalSize: JSON.stringify(syncData).length,
         compressedSize: base64Data.length,
-        format: 'lz-base64'
+        format: 'utf8-base64'
       };
 
       return base64Data;
@@ -194,6 +194,26 @@ export class SyncManager {
       console.error('データ圧縮エラー:', error);
       throw new Error(`データの圧縮に失敗しました: ${error.message}`);
     }
+  }
+
+  // ArrayBufferをBase64に変換（UTF-8セーフ）
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  // Base64からArrayBufferに変換（UTF-8セーフ）
+  private base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
   }
 
   private lzStringCompress(input: string): string {
@@ -428,11 +448,11 @@ export class SyncManager {
         throw new Error('無効なQRコードデータです');
       }
 
-      // 3. Base64デコード
-      const compressedStr = atob(chunk.d);
+      // 3. Base64デコード（UTF-8セーフ）
+      const arrayBuffer = this.base64ToArrayBuffer(chunk.d);
       
-      // 4. 解凍
-      const jsonStr = this.lzStringDecompress(compressedStr);
+      // 4. UTF-8文字列に変換
+      const jsonStr = new TextDecoder().decode(arrayBuffer);
       
       // 5. JSONパース
       const data = JSON.parse(jsonStr);
