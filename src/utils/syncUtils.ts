@@ -176,17 +176,20 @@ export class SyncManager {
       // 3. 文字列に変換（空白を除去）
       const jsonStr = JSON.stringify(minimalData).replace(/\s+/g, '');
 
-      // 4. UTF-8バイト配列に変換
-      const utf8Bytes = new TextEncoder().encode(jsonStr);
-      
-      // 5. Base64エンコード（UTF-8セーフ）
-      const base64Data = this.arrayBufferToBase64(utf8Bytes);
+      // 4. LZ圧縮
+      const compressedStr = this.lzStringCompress(jsonStr);
 
-      // 6. サイズ情報を記録
+      // 5. UTF-8バイト配列に変換
+      const utf8Bytes = new TextEncoder().encode(compressedStr);
+      
+      // 6. Base64エンコード
+      const base64Data = btoa(String.fromCharCode.apply(null, utf8Bytes));
+
+      // 7. サイズ情報を記録
       this.compressionInfo = {
         originalSize: JSON.stringify(syncData).length,
         compressedSize: base64Data.length,
-        format: 'utf8-base64'
+        format: 'lz-utf8-base64'
       };
 
       return base64Data;
@@ -405,9 +408,21 @@ export class SyncManager {
         }
         combinedData += chunk.d;
       }
+
       // Base64デコード
-      const jsonStr = decodeURIComponent(atob(combinedData));
-      // 展開
+      const binaryStr = atob(combinedData);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      // UTF-8デコード
+      const decodedStr = new TextDecoder().decode(bytes);
+
+      // LZ解凍
+      const jsonStr = this.lzStringDecompress(decodedStr);
+
+      // JSONパース
       return this.expandSyncData(JSON.parse(jsonStr));
     } catch (error) {
       console.error('データ復元エラー:', error);
