@@ -15,7 +15,23 @@ const COLOR_PALETTE = [
 export const usePostalTags = () => {
   const [tags, setTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : DEFAULT_TAGS;
+    if (saved) {
+      const existingTags = JSON.parse(saved);
+      // 既存のタグ名を取得
+      const existingTagNames = new Set(existingTags.map((t: { name: string }) => t.name));
+      
+      // DEFAULT_TAGSから重複していないタグを抽出
+      const newDefaultTags = DEFAULT_TAGS.filter(tag => !existingTagNames.has(tag.name));
+      
+      // 既存のタグと新しいデフォルトタグを結合
+      const mergedTags = [...existingTags, ...newDefaultTags];
+      
+      // 更新されたタグリストを保存
+      localStorage.setItem('postal_tags', JSON.stringify(mergedTags));
+      
+      return mergedTags;
+    }
+    return DEFAULT_TAGS;
   });
 
   const [showAddTag, setShowAddTag] = useState(false);

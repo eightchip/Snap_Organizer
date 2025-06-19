@@ -1,17 +1,15 @@
 export const COLOR_PALETTE = [
   // 書類・文書関連
-  { name: '請求書', color: '#3B82F6' },  // 青
-  { name: '領収書', color: '#22C55E' },  // 緑
-  { name: '契約書', color: '#A78BFA' },  // 紫
-  { name: '申請書', color: '#F59E0B' },  // オレンジ
-  { name: '通知', color: '#EC4899' },    // ピンク
-
-  // 生活関連
-  { name: '病院', color: '#EF4444' },    // 赤
-  { name: '学校', color: '#06B6D4' },    // シアン
-  { name: '住所', color: '#8B5CF6' },    // バイオレット
-  { name: '保険', color: '#10B981' },    // エメラルド
-  { name: 'メモ', color: '#6366F1' },    // インディゴ
+  { name: '仕事', color: '#3B82F6' },  // 青
+  { name: '趣味', color: '#22C55E' },  // 緑
+  { name: '旅行', color: '#A78BFA' },  // 紫
+  { name: '食事', color: '#F59E0B' },  // オレンジ
+  { name: '趣味', color: '#EC4899' },    // ピンク
+  { name: '営業第一部', color: '#EF4444' },    // 赤
+  { name: '営業第二部', color: '#06B6D4' },    // シアン
+  { name: '経営企画部', color: '#8B5CF6' },    // バイオレット
+  { name: '経理部', color: '#10B981' },    // エメラルド
+  { name: '総務部', color: '#6366F1' },    // インディゴ
 
   // 追加のカラーパレット（新規タグ用）
   { name: '赤', color: '#DC2626' },

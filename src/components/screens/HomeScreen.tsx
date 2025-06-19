@@ -1,10 +1,9 @@
-import React from 'react';
-import { useMemo, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import { usePostalTags } from '../../hooks/usePostalTags';
 import { MAX_TAGS } from '../../constants/tags';
@@ -12,6 +11,9 @@ import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { loadImageBlob } from '../../utils/imageDB';
 import { LocationMap } from '../LocationMap';
+import { saveAppIcon, getAppIcon, removeAppIcon } from '../../utils/storage';
+import { resizeImage } from '../../utils/imageResize';
+import { imageToDataURL } from '../../utils/ocr';
 
 interface HomeScreenProps {
   items: PhotoItem[];
@@ -142,6 +144,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
 
   const [showMap, setShowMap] = useState(false);
+
+  const [customIcon, setCustomIcon] = useState<string | null>(getAppIcon());
+  const iconInputRef = useRef<HTMLInputElement>(null);
 
   // 画像URLの読み込み
   useEffect(() => {
@@ -283,6 +288,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     setImportError(null);
     try {
       const data = JSON.parse(importText);
+      // タグのマージ処理
+      if (data.tags && Array.isArray(data.tags)) {
+        const existing = localStorage.getItem('postal_tags');
+        let mergedTags = data.tags;
+        if (existing) {
+          const existingTags = JSON.parse(existing);
+          const existingNames = new Set(existingTags.map((t: { name: string }) => t.name));
+          const newTags = data.tags.filter((t: { name: string }) => !existingNames.has(t.name));
+          mergedTags = [...existingTags, ...newTags];
+        }
+        localStorage.setItem('postal_tags', JSON.stringify(mergedTags));
+      }
       onImport(data);
       setShowImportModal(false);
       setImportText('');
@@ -329,6 +346,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  // アイコンの設定
+  const handleIconSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files?.length) return;
+    try {
+      const file = event.target.files[0];
+      const resizedBase64 = await resizeImage(await imageToDataURL(file), 40, 40);
+      const response = await fetch(resizedBase64);
+      const blob = await response.blob();
+      const iconUrl = await saveAppIcon(blob) as string;
+      setCustomIcon(iconUrl);
+    } catch (error) {
+      console.error('アイコンの設定に失敗しました:', error);
+      alert('アイコンの設定に失敗しました');
+    }
+  };
+
+  // アイコンの削除
+  const handleRemoveIcon = () => {
+    if (window.confirm('カスタムアイコンを削除しますか？')) {
+      removeAppIcon();
+      setCustomIcon(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* App Header */}
@@ -342,6 +383,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 style={{ height: 40, width: 40 }}
               />
               <h1 className="text-xl font-bold">Snap Organizer</h1>
+              {customIcon ? (
+                <div className="relative group">
+                  <img
+                    src={customIcon}
+                    alt="アプリアイコン"
+                    className="h-10 w-10 rounded-lg object-contain"
+                  />
+                  <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={handleRemoveIcon}
+                      className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => iconInputRef.current?.click()}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="アイコンを設定"
+                >
+                  <Image className="h-5 w-5" />
+                </button>
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -358,6 +424,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               >
                 <Download className="h-5 w-5" />
               </button>
+              <input
+                ref={iconInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleIconSelect}
+                className="hidden"
+              />
             </div>
           </div>
         </div>
