@@ -29,8 +29,9 @@ export interface DeviceInfo {
 export class SyncManager {
   private deviceId: string;
   private deviceName: string;
-  private readonly MAX_QR_SIZE = 2000; // QRコードの最大サイズ（安全マージン付き）
-  private readonly COMPRESSION_LEVEL = 9; // 圧縮レベル（0-9）
+  private readonly MAX_QR_SIZE = 1000; // QRコードの最大サイズを1000バイトに縮小
+  private readonly COMPRESSION_LEVEL = 9;
+  private readonly MAX_QR_CHUNKS = 4; // 最大分割数
 
   constructor() {
     this.deviceId = this.getOrCreateDeviceId();
@@ -60,14 +61,30 @@ export class SyncManager {
 
   // データの準備（高度な圧縮）
   async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<SyncData> {
-    const data = {
-      items,
-      groups,
+    // 画像データを除外したデータを作成
+    const sanitizedData = {
+      items: items.map(item => {
+        const { image, ...rest } = item;
+        return {
+          ...rest,
+          imageId: image // 画像IDのみ保持
+        };
+      }),
+      groups: groups.map(group => ({
+        ...group,
+        photos: group.photos.map(photo => {
+          const { image, ...rest } = photo;
+          return {
+            ...rest,
+            imageId: image // 画像IDのみ保持
+          };
+        })
+      })),
       tags
     };
 
     // データを高度に圧縮
-    const compressedData = await this.compressDataAdvanced(JSON.stringify(data));
+    const compressedData = await this.compressDataAdvanced(JSON.stringify(sanitizedData));
     
     // チェックサムを計算
     const checksum = await this.calculateChecksum(compressedData);
@@ -76,26 +93,31 @@ export class SyncManager {
       version: '1.0',
       timestamp: Date.now(),
       deviceId: this.deviceId,
-      data: data,
+      data: sanitizedData,
       checksum
     };
   }
 
   // 高度なデータ圧縮
   private async compressDataAdvanced(data: string): Promise<string> {
-    // 1. 不要な空白と改行を削除
-    const minified = JSON.stringify(JSON.parse(data));
-    
-    // 2. 長い文字列の短縮（画像データは除外）
-    const shortened = this.shortenData(minified);
-    
-    // 3. Base64エンコード
-    const base64 = btoa(encodeURIComponent(shortened));
-    
-    // 4. さらに圧縮（簡単なアルゴリズム）
-    const compressed = this.simpleCompress(base64);
-    
-    return compressed;
+    try {
+      // 1. 不要な空白と改行を削除
+      const minified = JSON.stringify(JSON.parse(data));
+      
+      // 2. 長い文字列の短縮（画像データは除外）
+      const shortened = this.shortenData(minified);
+      
+      // 3. Base64エンコード（URLセーフな形式で）
+      const encoded = btoa(shortened)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+      
+      return encoded;
+    } catch (error) {
+      console.error('圧縮エラー:', error);
+      throw error;
+    }
   }
 
   // データの短縮
@@ -103,25 +125,31 @@ export class SyncManager {
     try {
       const parsed = JSON.parse(data);
       
-      // 画像データを短縮（base64の最初と最後のみ保持）
-      const shortenImageData = (item: any) => {
-        if (item.image && item.image.length > 100) {
-          item.image = item.image.substring(0, 50) + '...' + item.image.substring(item.image.length - 50);
+      // 日付を短い形式に変換
+      const convertDates = (obj: any) => {
+        if (obj.createdAt) {
+          obj.createdAt = new Date(obj.createdAt).getTime();
         }
-        return item;
+        if (obj.updatedAt) {
+          obj.updatedAt = new Date(obj.updatedAt).getTime();
+        }
+        return obj;
       };
 
-      // アイテムの画像データを短縮
+      // アイテムの処理
       if (parsed.items) {
-        parsed.items = parsed.items.map(shortenImageData);
+        parsed.items = parsed.items.map((item: any) => convertDates(item));
       }
 
-      // グループ内の画像データを短縮
+      // グループの処理
       if (parsed.groups) {
-        parsed.groups = parsed.groups.map((group: any) => ({
-          ...group,
-          photos: group.photos.map(shortenImageData)
-        }));
+        parsed.groups = parsed.groups.map((group: any) => {
+          group = convertDates(group);
+          if (group.photos) {
+            group.photos = group.photos.map((photo: any) => convertDates(photo));
+          }
+          return group;
+        });
       }
 
       return JSON.stringify(parsed);
@@ -129,36 +157,6 @@ export class SyncManager {
       console.warn('データ短縮に失敗、元のデータを使用:', error);
       return data;
     }
-  }
-
-  // 簡単な圧縮アルゴリズム
-  private simpleCompress(data: string): string {
-    // 連続する文字の圧縮
-    let compressed = '';
-    let count = 1;
-    let current = data[0];
-
-    for (let i = 1; i < data.length; i++) {
-      if (data[i] === current) {
-        count++;
-      } else {
-        if (count > 3) {
-          compressed += `${count}${current}`;
-        } else {
-          compressed += current.repeat(count);
-        }
-        current = data[i];
-        count = 1;
-      }
-    }
-
-    if (count > 3) {
-      compressed += `${count}${current}`;
-    } else {
-      compressed += current.repeat(count);
-    }
-
-    return compressed;
   }
 
   // データをチャンクに分割
@@ -197,13 +195,15 @@ export class SyncManager {
   async generateQRCode(syncData: SyncData): Promise<string[]> {
     try {
       const dataString = JSON.stringify(syncData);
+      const totalSize = new Blob([dataString]).size;
       
       // データサイズをチェック
-      if (dataString.length <= this.MAX_QR_SIZE) {
+      if (totalSize <= this.MAX_QR_SIZE) {
         // 単一QRコードで対応可能
         const qrCodeDataUrl = await QRCode.toDataURL(dataString, {
-          width: 300,
-          margin: 2,
+          width: 200, // サイズを小さく
+          margin: 1,  // マージンを小さく
+          errorCorrectionLevel: 'M', // エラー訂正レベルを中程度に
           color: {
             dark: '#000000',
             light: '#FFFFFF'
@@ -215,18 +215,25 @@ export class SyncManager {
         const compressedData = await this.compressDataAdvanced(dataString);
         const chunks = this.splitDataIntoChunks(compressedData);
         
+        if (chunks.length > this.MAX_QR_CHUNKS) {
+          throw new Error(`データが大きすぎます（${chunks.length}分割が必要）`);
+        }
+
         const qrCodes: string[] = [];
-        for (const chunk of chunks) {
+        for (let i = 0; i < chunks.length; i++) {
           const chunkData = JSON.stringify({
             type: 'sync_chunk',
-            ...chunk,
+            index: i,
+            total: chunks.length,
+            data: chunks[i],
             deviceId: this.deviceId,
             timestamp: Date.now()
           });
 
           const qrCode = await QRCode.toDataURL(chunkData, {
-            width: 300,
-            margin: 2,
+            width: 200, // サイズを小さく
+            margin: 1,  // マージンを小さく
+            errorCorrectionLevel: 'M', // エラー訂正レベルを中程度に
             color: {
               dark: '#000000',
               light: '#FFFFFF'
@@ -276,40 +283,24 @@ export class SyncManager {
 
   // 高度なデータ解凍
   private async decompressDataAdvanced(compressedData: string): Promise<string> {
-    // 1. 簡単な圧縮を解凍
-    const decompressed = this.simpleDecompress(compressedData);
-    
-    // 2. Base64デコード
-    const decoded = decodeURIComponent(atob(decompressed));
-    
-    return decoded;
-  }
-
-  // 簡単な解凍アルゴリズム
-  private simpleDecompress(data: string): string {
-    let result = '';
-    let i = 0;
-    
-    while (i < data.length) {
-      if (/\d/.test(data[i])) {
-        // 数字が見つかった場合、圧縮されたデータとして処理
-        let count = '';
-        while (i < data.length && /\d/.test(data[i])) {
-          count += data[i];
-          i++;
-        }
-        if (i < data.length) {
-          const char = data[i];
-          result += char.repeat(parseInt(count));
-          i++;
-        }
-      } else {
-        result += data[i];
-        i++;
-      }
+    try {
+      // 1. Base64デコード（URLセーフな形式から）
+      const base64 = compressedData
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+      
+      // パディングを追加
+      const pad = base64.length % 4;
+      const paddedBase64 = pad ? base64 + '='.repeat(4 - pad) : base64;
+      
+      // デコード
+      const decoded = atob(paddedBase64);
+      
+      return decoded;
+    } catch (error) {
+      console.error('解凍エラー:', error);
+      throw error;
     }
-    
-    return result;
   }
 
   // QRコードからデータを読み取り
