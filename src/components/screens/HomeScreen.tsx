@@ -4,7 +4,7 @@ import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import { usePostalTags } from '../../hooks/usePostalTags';
 import QRcode from 'qrcode.react';
@@ -24,6 +24,7 @@ interface HomeScreenProps {
   onBulkTagRename: (oldName: string, newName: string) => void;
   onImport: (data: any) => void;
   onExport: () => void;
+  onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
 }
 
 const COLOR_PALETTE = [
@@ -63,7 +64,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onGroupClick,
   onBulkTagRename,
   onImport,
-  onExport
+  onExport,
+  onBulkDelete
 }) => {
   const {
     tags,
@@ -94,6 +96,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [importError, setImportError] = useState<string | null>(null);
 
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+
   useEffect(() => {
     const loadImages = async () => {
       const newMap: Record<string, string> = {};
@@ -240,10 +246,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     setEndDate('');
   };
 
+  const handleToggleSelection = (id: string, type: 'item' | 'group') => {
+    if (type === 'item') {
+      setSelectedItemIds(prev =>
+        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      );
+    } else {
+      setSelectedGroupIds(prev =>
+        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      );
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedItemIds.length === 0 && selectedGroupIds.length === 0) return;
+    if (window.confirm(`選択した${selectedItemIds.length + selectedGroupIds.length}件のアイテムを削除しますか？`)) {
+      onBulkDelete(selectedItemIds, selectedGroupIds);
+      setSelectedItemIds([]);
+      setSelectedGroupIds([]);
+      setIsSelectionMode(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* App Header */}
-      <div className="bg-white shadow-sm">
+      <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -413,21 +441,47 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <div className="space-y-4">
             {/* Display single items */}
             {filteredItems.map(item => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                onClick={() => onItemClick(item.id)}
-                imageUrl={imageUrlMap[item.image]}
-              />
+              <div key={item.id} className="relative">
+                {isSelectionMode && (
+                  <button
+                    onClick={() => handleToggleSelection(item.id, 'item')}
+                    className={`absolute top-2 right-2 z-10 p-2 rounded-full ${
+                      selectedItemIds.includes(item.id)
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white text-gray-500'
+                    }`}
+                  >
+                    <CheckSquare className="h-5 w-5" />
+                  </button>
+                )}
+                <ItemCard
+                  item={item}
+                  onClick={isSelectionMode ? () => handleToggleSelection(item.id, 'item') : () => onItemClick(item.id)}
+                  imageUrl={imageUrlMap[item.image]}
+                />
+              </div>
             ))}
             {/* Display groups */}
             {filteredGroups.map(group => (
-              <ItemCard
-                key={group.id}
-                group={group}
-                onClick={() => onGroupClick(group.id)}
-                imageUrl={group.photos[0] ? imageUrlMap[group.photos[0].image] : undefined}
-              />
+              <div key={group.id} className="relative">
+                {isSelectionMode && (
+                  <button
+                    onClick={() => handleToggleSelection(group.id, 'group')}
+                    className={`absolute top-2 right-2 z-10 p-2 rounded-full ${
+                      selectedGroupIds.includes(group.id)
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white text-gray-500'
+                    }`}
+                  >
+                    <CheckSquare className="h-5 w-5" />
+                  </button>
+                )}
+                <ItemCard
+                  group={group}
+                  onClick={isSelectionMode ? () => handleToggleSelection(group.id, 'group') : () => onGroupClick(group.id)}
+                  imageUrl={group.photos[0] ? imageUrlMap[group.photos[0].image] : undefined}
+                />
+              </div>
             ))}
           </div>
         )}

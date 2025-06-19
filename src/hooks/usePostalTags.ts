@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { loadAllData, saveAllData } from '../utils/storage';
 
 interface Tag {
   name: string;
@@ -58,10 +59,27 @@ export const usePostalTags = () => {
     const newName = tagEditName.trim();
     const updated = tags.map((t, i) => i === tagEditIdx ? { name: newName, color: tagEditColor } : t);
     setTags(updated);
+
+    // アイテムとグループのタグも更新
+    const data = loadAllData();
+    const updatedItems = data.items.map(item => ({
+      ...item,
+      tags: item.tags.map(tag => tag === oldName ? newName : tag)
+    }));
+    const updatedGroups = data.groups.map(group => ({
+      ...group,
+      tags: group.tags.map(tag => tag === oldName ? newName : tag)
+    }));
+    saveAllData({
+      items: updatedItems,
+      groups: updatedGroups,
+      tags: updated
+    });
+
     setTagEditIdx(null);
     setTagEditName('');
     setTagEditColor('#3B82F6');
-    return { oldName, newName }; // タグ名変更時の情報を返す
+    return { oldName, newName };
   };
 
   // タグ編集キャンセル
@@ -77,7 +95,24 @@ export const usePostalTags = () => {
     const delName = tags[idx].name;
     const updated = tags.filter((_, i) => i !== idx);
     setTags(updated);
-    return delName; // 削除したタグ名を返す
+
+    // アイテムとグループからも削除
+    const data = loadAllData();
+    const updatedItems = data.items.map(item => ({
+      ...item,
+      tags: item.tags.filter(tag => tag !== delName)
+    }));
+    const updatedGroups = data.groups.map(group => ({
+      ...group,
+      tags: group.tags.filter(tag => tag !== delName)
+    }));
+    saveAllData({
+      items: updatedItems,
+      groups: updatedGroups,
+      tags: updated
+    });
+
+    return delName;
   };
 
   return {

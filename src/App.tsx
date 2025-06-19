@@ -162,6 +162,23 @@ function App() {
     });
   };
 
+  const handleBulkDelete = async (itemIds: string[], groupIds: string[]) => {
+    setError(null);
+    try {
+      // アイテムの削除
+      for (const itemId of itemIds) {
+        await deleteItem(itemId);
+      }
+      // グループの削除
+      for (const groupId of groupIds) {
+        await deleteGroup(groupId);
+      }
+    } catch (error: any) {
+      setError(error.message || '削除に失敗しました');
+      console.error('Delete error:', error);
+    }
+  };
+
   const renderScreen = () => {
     switch (appState.screen.type) {
       case 'home':
@@ -179,6 +196,7 @@ function App() {
             onBulkTagRename={handleBulkTagRename}
             onImport={handleImport}
             onExport={handleExport}
+            onBulkDelete={handleBulkDelete}
           />
         );
 
