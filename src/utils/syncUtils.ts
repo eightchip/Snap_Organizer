@@ -139,74 +139,107 @@ export class SyncManager {
   // 高度なデータ圧縮
   private async compressDataAdvanced(syncData: SyncData): Promise<string> {
     try {
-      // データの存在チェックと構造の検証
+      // 1. 基本的なnullチェック
       if (!syncData) {
         throw new Error('同期データがありません');
       }
-      if (!syncData.version || !syncData.timestamp || !syncData.deviceId) {
-        throw new Error('同期データの基本情報が不足しています');
+
+      // 2. 必須フィールドの存在チェック
+      const requiredFields = ['version', 'timestamp', 'deviceId', 'data'];
+      for (const field of requiredFields) {
+        if (!syncData[field]) {
+          throw new Error(`必須フィールド '${field}' が不足しています`);
+        }
       }
+
+      // 3. データ構造の検証
       if (!syncData.data || typeof syncData.data !== 'object') {
         throw new Error('同期データの内容が不正です');
       }
+
+      // 4. 配列の検証
       if (!Array.isArray(syncData.data.items) || !Array.isArray(syncData.data.groups)) {
         throw new Error('items または groups が配列ではありません');
       }
 
-      // 1. データを短縮名で再構成
+      // 5. データを短縮名で再構成
       const minimalData = {
         v: syncData.version,
         ts: syncData.timestamp,
         did: syncData.deviceId,
         d: {
-          i: syncData.data.items.map(item => {
-            if (!item.id || !item.createdAt || !item.updatedAt) {
-              throw new Error('アイテムデータが不正です: ' + JSON.stringify(item));
+          i: syncData.data.items.map((item, index) => {
+            if (!item || typeof item !== 'object') {
+              throw new Error(`不正なアイテムデータ (index: ${index})`);
+            }
+            if (!item.id) {
+              throw new Error(`アイテムIDが不足しています (index: ${index})`);
             }
             return {
               i: item.id,
-              t: item.tags || [],
+              t: Array.isArray(item.tags) ? item.tags : [],
               m: item.memo || '',
-              c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
-              u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
+              c: this.normalizeTimestamp(item.createdAt),
+              u: this.normalizeTimestamp(item.updatedAt)
             };
           }),
-          g: syncData.data.groups.map(group => {
-            if (!group.id || !group.createdAt || !group.updatedAt || !Array.isArray(group.photos)) {
-              throw new Error('グループデータが不正です: ' + JSON.stringify(group));
+          g: syncData.data.groups.map((group, index) => {
+            if (!group || typeof group !== 'object') {
+              throw new Error(`不正なグループデータ (index: ${index})`);
+            }
+            if (!group.id) {
+              throw new Error(`グループIDが不足しています (index: ${index})`);
             }
             return {
               i: group.id,
               t: group.title || '',
               m: group.memo || '',
-              tg: group.tags || [],
-              c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
-              u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
-              p: group.photos.map(photo => {
-                if (!photo.id || !photo.createdAt || !photo.updatedAt) {
-                  throw new Error('写真データが不正です: ' + JSON.stringify(photo));
+              tg: Array.isArray(group.tags) ? group.tags : [],
+              c: this.normalizeTimestamp(group.createdAt),
+              u: this.normalizeTimestamp(group.updatedAt),
+              p: Array.isArray(group.photos) ? group.photos.map((photo, photoIndex) => {
+                if (!photo || typeof photo !== 'object') {
+                  throw new Error(`不正な写真データ (group: ${index}, photo: ${photoIndex})`);
+                }
+                if (!photo.id) {
+                  throw new Error(`写真IDが不足しています (group: ${index}, photo: ${photoIndex})`);
                 }
                 return {
                   i: photo.id,
-                  t: photo.tags || [],
+                  t: Array.isArray(photo.tags) ? photo.tags : [],
                   m: photo.memo || '',
-                  c: photo.createdAt instanceof Date ? photo.createdAt.getTime() : new Date(photo.createdAt).getTime(),
-                  u: photo.updatedAt instanceof Date ? photo.updatedAt.getTime() : new Date(photo.updatedAt).getTime()
+                  c: this.normalizeTimestamp(photo.createdAt),
+                  u: this.normalizeTimestamp(photo.updatedAt)
                 };
-              })
+              }) : []
             };
           })
         }
       };
 
-      // 2. JSON文字列化
-      const jsonStr = JSON.stringify(minimalData);
-
-      // 3. Base64エンコード（1回のみ）
-      return btoa(jsonStr);
+      // 6. JSONに変換して返す
+      return JSON.stringify(minimalData);
     } catch (error) {
       console.error('データ圧縮エラー:', error);
-      throw error instanceof Error ? error : new Error('データの圧縮に失敗しました');
+      throw new Error(`データの圧縮に失敗しました: ${error.message}`);
+    }
+  }
+
+  // タイムスタンプを正規化するヘルパーメソッド
+  private normalizeTimestamp(timestamp: any): number {
+    if (!timestamp) {
+      return Date.now();
+    }
+    if (timestamp instanceof Date) {
+      return timestamp.getTime();
+    }
+    if (typeof timestamp === 'number') {
+      return timestamp;
+    }
+    try {
+      return new Date(timestamp).getTime();
+    } catch (error) {
+      return Date.now();
     }
   }
 
@@ -232,27 +265,62 @@ export class SyncManager {
   // QRコードの生成（圧縮→分割→QR化）
   async generateQRCode(syncData: SyncData): Promise<string[]> {
     try {
-      // 圧縮
-      const compressed = await this.compressDataAdvanced(syncData);
-      // 分割
-      const chunks = this.splitDataIntoChunks(compressed);
-      if (chunks.length > this.MAX_QR_CHUNKS) {
-        throw new Error(`データが大きすぎます（${chunks.length}分割が必要）`);
+      // 1. データを圧縮
+      const compressedData = await this.compressDataAdvanced(syncData);
+      
+      // 2. チャンクサイズを計算（ヘッダー情報を考慮）
+      const effectiveChunkSize = this.MAX_QR_SIZE - this.CHUNK_HEADER_SIZE;
+      
+      // 3. データをチャンクに分割
+      const chunks: ChunkData[] = [];
+      const totalChunks = Math.ceil(compressedData.length / effectiveChunkSize);
+      
+      if (totalChunks > this.MAX_QR_CHUNKS) {
+        throw new Error(`データが大きすぎます。${this.MAX_QR_CHUNKS}個以下のQRコードに収める必要があります。`);
       }
-      // QRコード化
-      const qrCodes = await Promise.all(chunks.map(async (chunk) => {
-        return QRCode.toDataURL(JSON.stringify(chunk), {
-          width: 180,
-          margin: 1,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#000000', light: '#FFFFFF' }
-        });
-      }));
-      console.log('Generating QR codes with data:', syncData);
-      return qrCodes;
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * effectiveChunkSize;
+        const end = Math.min(start + effectiveChunkSize, compressedData.length);
+        const chunkData = compressedData.slice(start, end);
+        
+        // チャンク情報を作成
+        const chunk: ChunkData = {
+          t: 'c',
+          n: totalChunks,
+          i: i,
+          d: chunkData,
+          h: await this.calculateSimpleChecksum(chunkData)
+        };
+        
+        chunks.push(chunk);
+      }
+
+      // 4. 各チャンクをQRコードに変換
+      const qrOptions: QRCode.QRCodeToDataURLOptions = {
+        errorCorrectionLevel: 'M' as QRCode.QRCodeErrorCorrectionLevel,
+        margin: 1,
+        width: 300,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      };
+
+      const qrPromises = chunks.map(async (chunk) => {
+        try {
+          const chunkStr = JSON.stringify(chunk);
+          return await QRCode.toDataURL(chunkStr, qrOptions);
+        } catch (error) {
+          console.error(`QRコード生成エラー (チャンク ${chunk.i + 1}/${chunk.n}):`, error);
+          throw new Error(`QRコード生成に失敗しました (チャンク ${chunk.i + 1}/${chunk.n}): ${error.message}`);
+        }
+      });
+
+      return await Promise.all(qrPromises);
     } catch (error) {
       console.error('QRコード生成エラー:', error);
-      throw error;
+      throw new Error(`QRコード生成に失敗しました: ${error.message}`);
     }
   }
 
