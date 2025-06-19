@@ -150,116 +150,54 @@ export class SyncManager {
         v: syncData.version,
         t: syncData.timestamp,
         d: syncData.deviceId,
-        i: syncData.data.items.map(item => [
-          item.id,
-          item.tags || [],
-          item.memo || '',
-          this.normalizeTimestamp(item.createdAt),
-          this.normalizeTimestamp(item.updatedAt)
-        ]),
-        g: syncData.data.groups.map(group => [
-          group.id,
-          group.title || '',
-          group.tags || [],
-          group.memo || '',
-          this.normalizeTimestamp(group.createdAt),
-          this.normalizeTimestamp(group.updatedAt),
-          (group.photos || []).map(photo => [
-            photo.id,
-            photo.tags || [],
-            photo.memo || ''
-          ])
-        ]),
+        i: syncData.data.items.map(item => ({
+          i: item.id,
+          t: item.tags || [],
+          m: item.memo || '',
+          c: this.normalizeTimestamp(item.createdAt),
+          u: this.normalizeTimestamp(item.updatedAt)
+        })),
+        g: syncData.data.groups.map(group => ({
+          i: group.id,
+          t: group.title || '',
+          g: group.tags || [],
+          m: group.memo || '',
+          c: this.normalizeTimestamp(group.createdAt),
+          u: this.normalizeTimestamp(group.updatedAt),
+          p: (group.photos || []).map(photo => ({
+            i: photo.id,
+            t: photo.tags || [],
+            m: photo.memo || ''
+          }))
+        })),
         tg: syncData.data.tags || []
       };
 
       // 3. 文字列に変換
       const jsonStr = JSON.stringify(minimalData);
 
-      // 4. LZ圧縮を適用
-      const compressedData = await this.compressWithLZ(jsonStr);
+      // 4. Base64エンコード
+      const base64Data = btoa(encodeURIComponent(jsonStr));
 
-      return compressedData;
+      // 5. サイズ情報を記録
+      this.compressionInfo = {
+        originalSize: JSON.stringify(syncData).length,
+        compressedSize: base64Data.length,
+        format: 'base64'
+      };
+
+      return base64Data;
     } catch (error) {
       console.error('データ圧縮エラー:', error);
       throw new Error(`データの圧縮に失敗しました: ${error.message}`);
     }
   }
 
-  private async compressWithLZ(data: string): Promise<string> {
-    // LZ-stringライブラリを使用してデータを圧縮
-    const compressed = this.lzCompress(data);
-    return compressed;
-  }
-
-  private lzCompress(input: string): string {
-    // 簡易LZ77圧縮の実装
-    const dictionary: { [key: string]: number } = {};
-    let result = '';
-    let phrase = '';
-    
-    for (let i = 0; i < input.length; i++) {
-      const char = input[i];
-      const newPhrase = phrase + char;
-      
-      if (dictionary[newPhrase] !== undefined) {
-        phrase = newPhrase;
-      } else {
-        if (phrase !== '') {
-          const code = dictionary[phrase] !== undefined ? dictionary[phrase].toString(36) : phrase;
-          result += `${code.length},${code}`;
-        }
-        dictionary[newPhrase] = Object.keys(dictionary).length;
-        phrase = char;
-      }
-    }
-    
-    if (phrase !== '') {
-      const code = dictionary[phrase] !== undefined ? dictionary[phrase].toString(36) : phrase;
-      result += `${code.length},${code}`;
-    }
-    
-    // 圧縮結果が元のデータより大きい場合は元のデータを返す
-    return result.length < input.length ? result : input;
-  }
-
-  private async decompressWithLZ(compressed: string): Promise<string> {
-    try {
-      // 圧縮されていない場合はそのまま返す
-      if (!compressed.includes(',')) {
-        return compressed;
-      }
-
-      // LZ77圧縮の展開
-      const dictionary: string[] = [];
-      let result = '';
-      let i = 0;
-
-      while (i < compressed.length) {
-        const lengthEnd = compressed.indexOf(',', i);
-        const length = parseInt(compressed.slice(i, lengthEnd));
-        const code = compressed.slice(lengthEnd + 1, lengthEnd + 1 + length);
-        
-        if (code.match(/^[0-9a-z]+$/)) {
-          const index = parseInt(code, 36);
-          result += dictionary[index] || code;
-        } else {
-          result += code;
-        }
-        
-        if (result.length > 0) {
-          dictionary.push(result);
-        }
-        
-        i = lengthEnd + 1 + length;
-      }
-
-      return result;
-    } catch (error) {
-      console.error('解凍エラー:', error);
-      throw new Error('データの解凍に失敗しました');
-    }
-  }
+  private compressionInfo: {
+    originalSize: number;
+    compressedSize: number;
+    format: string;
+  } | null = null;
 
   // タイムスタンプを正規化するヘルパーメソッド
   private normalizeTimestamp(timestamp: any): number {
@@ -354,16 +292,17 @@ export class SyncManager {
       });
 
       const results = await Promise.all(qrPromises);
-      
-      // 圧縮率の計算と表示
-      const originalSize = JSON.stringify(syncData).length;
-      const compressedSize = compressedData.length;
-      const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100;
-      console.log(`圧縮情報:
-        元のサイズ: ${originalSize} バイト
-        圧縮後: ${compressedSize} バイト
-        圧縮率: ${compressionRatio.toFixed(1)}%
-        QRコード数: ${results.length}個`);
+
+      // 5. 圧縮情報を表示
+      if (this.compressionInfo) {
+        const compressionRatio = ((this.compressionInfo.originalSize - this.compressionInfo.compressedSize) / this.compressionInfo.originalSize) * 100;
+        console.log(`圧縮情報:
+          元のサイズ: ${this.compressionInfo.originalSize} バイト
+          圧縮後: ${this.compressionInfo.compressedSize} バイト
+          圧縮率: ${compressionRatio.toFixed(1)}%
+          形式: ${this.compressionInfo.format}
+          QRコード数: ${results.length}個`);
+      }
 
       return results;
     } catch (error) {
@@ -387,10 +326,10 @@ export class SyncManager {
         }
         combinedData += chunk.d;
       }
-      // データを解凍
-      const decompressedData = await this.decompressWithLZ(combinedData);
+      // Base64デコード
+      const jsonStr = decodeURIComponent(atob(combinedData));
       // 展開
-      return this.expandSyncData(JSON.parse(decompressedData));
+      return this.expandSyncData(JSON.parse(jsonStr));
     } catch (error) {
       console.error('データ復元エラー:', error);
       throw error;
@@ -422,48 +361,25 @@ export class SyncManager {
   // QRコードからデータを読み取り
   async readQRCode(qrData: string): Promise<SyncData | null> {
     try {
-      const parsed = JSON.parse(qrData) as ChunkData | CompressedSyncData;
+      // 1. QRコードデータをパース
+      const chunk = JSON.parse(qrData) as ChunkData;
       
-      // チャンクデータの場合
-      if ('t' in parsed && parsed.t === 'c') {
-        // チャンクデータを一時保存
-        const key = `temp_chunk_${parsed.i}`;
-        localStorage.setItem(key, JSON.stringify(parsed));
-        
-        // 全チャンクが揃っているか確認
-        const chunks: ChunkData[] = [];
-        for (let i = 0; i < parsed.n; i++) {
-          const chunkData = localStorage.getItem(`temp_chunk_${i}`);
-          if (!chunkData) return null;
-          chunks.push(JSON.parse(chunkData));
-        }
-        
-        // チャンクを結合
-        const combinedData = chunks
-          .sort((a, b) => a.i - b.i)
-          .map(chunk => {
-            // チェックサム検証
-            if (this.calculateSimpleChecksum(chunk.d) !== chunk.h) {
-              throw new Error(`チャンク${chunk.i}のチェックサムが一致しません`);
-            }
-            return chunk.d;
-          })
-          .join('');
-        
-        // 一時データを削除
-        for (let i = 0; i < parsed.n; i++) {
-          localStorage.removeItem(`temp_chunk_${i}`);
-        }
-        
-        const fullData = JSON.parse(combinedData) as CompressedSyncData;
-        return this.expandSyncData(fullData);
+      // 2. チャンクデータを検証
+      if (!chunk || !chunk.d || chunk.t !== 'c') {
+        throw new Error('無効なQRコードデータです');
       }
+
+      // 3. Base64デコード
+      const jsonStr = decodeURIComponent(atob(chunk.d));
       
-      // 単一QRコードの場合
-      return this.expandSyncData(parsed as CompressedSyncData);
+      // 4. JSONパース
+      const data = JSON.parse(jsonStr);
+      
+      // 5. データを展開
+      return this.expandSyncData(data);
     } catch (error) {
       console.error('QRコード読み取りエラー:', error);
-      return null;
+      throw new Error(`QRコードの読み取りに失敗しました: ${error.message}`);
     }
   }
 
@@ -471,32 +387,32 @@ export class SyncManager {
   private expandSyncData(data: any): SyncData {
     return {
       version: data.v,
-      timestamp: data.ts,
-      deviceId: data.did,
+      timestamp: data.t,
+      deviceId: data.d,
       data: {
-        items: data.d.i.map((item: any) => ({
+        items: data.i.map((item: any) => ({
           id: item.i,
           tags: item.t,
           memo: item.m,
-          createdAt: new Date(item.c),
-          updatedAt: new Date(item.u)
+          createdAt: item.c,
+          updatedAt: item.u
         })),
-        groups: data.d.g.map((group: any) => ({
+        groups: data.g.map((group: any) => ({
           id: group.i,
           title: group.t,
           tags: group.g,
           memo: group.m,
-          createdAt: new Date(group.c),
-          updatedAt: new Date(group.u),
+          createdAt: group.c,
+          updatedAt: group.u,
           photos: group.p.map((photo: any) => ({
             id: photo.i,
             tags: photo.t,
             memo: photo.m
           }))
         })),
-        tags: data.d.tg
+        tags: data.tg
       },
-      checksum: data.c
+      checksum: data.h || ''
     };
   }
 
