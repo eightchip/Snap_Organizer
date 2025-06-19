@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { PostalItemGroup, PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin, GripVertical } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareGroup } from '../../utils/share';
 import { LocationMap } from '../LocationMap';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 interface DetailGroupScreenProps {
   group: PostalItemGroup;
@@ -299,6 +300,17 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     setEditedTags(tags => tags.filter(t => t !== delName));
   };
 
+  // ドラッグ&ドロップによる並び替え
+  const handleDragEnd = (result: any) => {
+    if (!result.destination) return;
+    
+    const items = Array.from(editedPhotos);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    
+    setEditedPhotos(items);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -404,43 +416,89 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
               </div>
             )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {editedPhotos.map((photo) => (
-              <div key={photo.id} className="relative group">
-                <img
-                  src={rotatedImageUrlMap[photo.id] || ''}
-                  alt="プレビュー"
-                  className="w-full h-24 object-contain rounded"
-                />
-                {isEditing && (
-                  <>
-                    <div className="absolute bottom-1 left-1 flex gap-1 opacity-80 group-hover:opacity-100">
-                      <button
-                        type="button"
-                        className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
-                        onClick={() => rotatePhoto(photo.id, 'left')}
-                      >
-                        <RotateCcw className="h-4 w-4 text-gray-700" />
-                      </button>
-                      <button
-                        type="button"
-                        className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
-                        onClick={() => rotatePhoto(photo.id, 'right')}
-                      >
-                        <RotateCw className="h-4 w-4 text-gray-700" />
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => handleRemovePhoto(photo.id)}
-                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="photos" direction="horizontal">
+              {(provided) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className="flex gap-2 overflow-x-auto pb-2 min-h-[120px]"
+                  style={{ scrollbarWidth: 'thin' }}
+                >
+                  {editedPhotos.map((photo, index) => (
+                    <Draggable
+                      key={photo.id}
+                      draggableId={photo.id}
+                      index={index}
+                      isDragDisabled={!isEditing}
                     >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className={`relative group flex-shrink-0`}
+                          style={{
+                            width: 120,
+                            minWidth: 120,
+                            maxWidth: 120,
+                            ...provided.draggableProps.style,
+                            transform: snapshot.isDragging
+                              ? provided.draggableProps.style?.transform
+                              : 'none',
+                          }}
+                        >
+                          {isEditing && (
+                            <div className="flex justify-center pt-1">
+                              <GripVertical className="h-5 w-5 text-gray-600 cursor-grab active:cursor-grabbing" />
+                            </div>
+                          )}
+                          <img
+                            src={rotatedImageUrlMap[photo.id] || ''}
+                            alt="プレビュー"
+                            className={`w-full h-[100px] object-contain rounded-lg border-2 ${
+                              snapshot.isDragging 
+                                ? 'border-blue-500 shadow-lg' 
+                                : isEditing 
+                                  ? 'border-gray-200'
+                                  : 'border-transparent'
+                            }`}
+                          />
+                          {isEditing && (
+                            <>
+                              <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  className="p-1.5 bg-white/80 rounded-lg hover:bg-white"
+                                  onClick={() => rotatePhoto(photo.id, 'left')}
+                                >
+                                  <RotateCcw className="h-4 w-4 text-gray-700" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="p-1.5 bg-white/80 rounded-lg hover:bg-white"
+                                  onClick={() => rotatePhoto(photo.id, 'right')}
+                                >
+                                  <RotateCw className="h-4 w-4 text-gray-700" />
+                                </button>
+                              </div>
+                              <button
+                                onClick={() => handleRemovePhoto(photo.id)}
+                                className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         </div>
 
         {/* Tags */}
