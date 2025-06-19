@@ -170,16 +170,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         }
       };
 
-      for (const item of items) {
+      // Ensure items and groups are arrays before iterating
+      const itemsArray = Array.isArray(items) ? items : [];
+      const groupsArray = Array.isArray(groups) ? groups : [];
+
+      for (const item of itemsArray) {
         if (item.image) {
           await loadAndCacheImage(item.image);
         }
       }
 
-      for (const group of groups) {
-        for (const photo of group.photos) {
-          if (photo.image) {
-            await loadAndCacheImage(photo.image);
+      for (const group of groupsArray) {
+        if (Array.isArray(group.photos)) {
+          for (const photo of group.photos) {
+            if (photo.image) {
+              await loadAndCacheImage(photo.image);
+            }
           }
         }
       }
