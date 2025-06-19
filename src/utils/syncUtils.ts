@@ -26,11 +26,19 @@ export interface DeviceInfo {
   dataVersion: string;
 }
 
+interface ChunkData {
+  type: 'chunk';
+  total: number;
+  index: number;
+  data: string;
+  checksum: string;
+}
+
 export class SyncManager {
   private deviceId: string;
   private deviceName: string;
-  private readonly MAX_QR_SIZE = 1000; // QRコードの最大サイズを1000バイトに縮小
-  private readonly COMPRESSION_LEVEL = 9;
+  private readonly MAX_QR_SIZE = 500; // QRコードの最大サイズを500バイトに縮小
+  private readonly CHUNK_HEADER_SIZE = 50; // チャンクヘッダーのサイズ
   private readonly MAX_QR_CHUNKS = 4; // 最大分割数
 
   constructor() {
@@ -61,39 +69,39 @@ export class SyncManager {
 
   // データの準備（高度な圧縮）
   async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<SyncData> {
-    // 画像データを除外したデータを作成
-    const sanitizedData = {
-      items: items.map(item => {
-        const { image, ...rest } = item;
-        return {
-          ...rest,
-          imageId: image // 画像IDのみ保持
-        };
-      }),
+    // 必要最小限のデータのみを含める
+    const minimalData = {
+      items: items.map(item => ({
+        id: item.id,
+        tags: item.tags,
+        memo: item.memo,
+        createdAt: new Date(item.createdAt).getTime(),
+        updatedAt: new Date(item.updatedAt).getTime()
+      })),
       groups: groups.map(group => ({
-        ...group,
-        photos: group.photos.map(photo => {
-          const { image, ...rest } = photo;
-          return {
-            ...rest,
-            imageId: image // 画像IDのみ保持
-          };
-        })
+        id: group.id,
+        title: group.title,
+        tags: group.tags,
+        memo: group.memo,
+        createdAt: new Date(group.createdAt).getTime(),
+        updatedAt: new Date(group.updatedAt).getTime(),
+        photos: group.photos.map(photo => ({
+          id: photo.id,
+          tags: photo.tags,
+          memo: photo.memo
+        }))
       })),
       tags
     };
 
-    // データを高度に圧縮
-    const compressedData = await this.compressDataAdvanced(JSON.stringify(sanitizedData));
-    
     // チェックサムを計算
-    const checksum = await this.calculateChecksum(compressedData);
+    const checksum = await this.calculateChecksum(JSON.stringify(minimalData));
 
     return {
       version: '1.0',
       timestamp: Date.now(),
       deviceId: this.deviceId,
-      data: sanitizedData,
+      data: minimalData,
       checksum
     };
   }
@@ -194,60 +202,64 @@ export class SyncManager {
   // QRコードの生成（分割対応）
   async generateQRCode(syncData: SyncData): Promise<string[]> {
     try {
-      const dataString = JSON.stringify(syncData);
-      const totalSize = new Blob([dataString]).size;
-      
-      // データサイズをチェック
-      if (totalSize <= this.MAX_QR_SIZE) {
-        // 単一QRコードで対応可能
-        const qrCodeDataUrl = await QRCode.toDataURL(dataString, {
-          width: 200, // サイズを小さく
-          margin: 1,  // マージンを小さく
-          errorCorrectionLevel: 'M', // エラー訂正レベルを中程度に
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          }
+      const jsonData = JSON.stringify(syncData);
+      console.log('QRコード生成: 元データサイズ', jsonData.length);
+
+      // データサイズが小さい場合は単一QRコード
+      if (jsonData.length <= this.MAX_QR_SIZE) {
+        console.log('単一QRコードで生成');
+        const qrCodeDataUrl = await QRCode.toDataURL(jsonData, {
+          width: 200,
+          margin: 1,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#000000', light: '#FFFFFF' }
         });
         return [qrCodeDataUrl];
-      } else {
-        // データを分割して複数のQRコードを生成
-        const compressedData = await this.compressDataAdvanced(dataString);
-        const chunks = this.splitDataIntoChunks(compressedData);
-        
-        if (chunks.length > this.MAX_QR_CHUNKS) {
-          throw new Error(`データが大きすぎます（${chunks.length}分割が必要）`);
-        }
-
-        const qrCodes: string[] = [];
-        for (let i = 0; i < chunks.length; i++) {
-          const chunkData = JSON.stringify({
-            type: 'sync_chunk',
-            index: i,
-            total: chunks.length,
-            data: chunks[i],
-            deviceId: this.deviceId,
-            timestamp: Date.now()
-          });
-
-          const qrCode = await QRCode.toDataURL(chunkData, {
-            width: 200, // サイズを小さく
-            margin: 1,  // マージンを小さく
-            errorCorrectionLevel: 'M', // エラー訂正レベルを中程度に
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          });
-          qrCodes.push(qrCode);
-        }
-        
-        return qrCodes;
       }
+
+      // データを分割
+      const chunks = this.splitIntoChunks(jsonData);
+      console.log(`${chunks.length}個のチャンクに分割`);
+
+      if (chunks.length > this.MAX_QR_CHUNKS) {
+        throw new Error(`データが大きすぎます（${chunks.length}分割が必要）`);
+      }
+
+      // 各チャンクをQRコード化
+      const qrCodes = await Promise.all(chunks.map(async (chunk, index) => {
+        const chunkData = {
+          type: 'chunk',
+          total: chunks.length,
+          index: index,
+          data: chunk,
+          checksum: this.calculateSimpleChecksum(chunk)
+        };
+        
+        return QRCode.toDataURL(JSON.stringify(chunkData), {
+          width: 200,
+          margin: 1,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+      }));
+
+      return qrCodes;
     } catch (error) {
       console.error('QRコード生成エラー:', error);
       throw error;
     }
+  }
+
+  // データを適切なサイズのチャンクに分割
+  private splitIntoChunks(data: string): string[] {
+    const chunks: string[] = [];
+    const chunkSize = this.MAX_QR_SIZE - this.CHUNK_HEADER_SIZE;
+    
+    for (let i = 0; i < data.length; i += chunkSize) {
+      chunks.push(data.slice(i, i + chunkSize));
+    }
+    
+    return chunks;
   }
 
   // 複数のQRコードからデータを復元
@@ -304,24 +316,49 @@ export class SyncManager {
   }
 
   // QRコードからデータを読み取り
-  async readQRCode(qrCodeDataUrl: string): Promise<SyncData> {
+  async readQRCode(qrData: string): Promise<SyncData | null> {
     try {
-      // QRコードの読み取り（実際の実装ではライブラリを使用）
-      const dataString = await this.decodeQRCode(qrCodeDataUrl);
-      const parsedData = JSON.parse(dataString);
+      const parsed = JSON.parse(qrData) as ChunkData | SyncData;
       
-      if (parsedData.type === 'sync_chunk') {
-        // チャンクデータの場合
-        throw new Error('複数のQRコードが必要です。すべてのQRコードを読み取ってください。');
-      } else {
-        // 通常の同期データの場合
-        const syncData: SyncData = parsedData;
-        await this.validateSyncData(syncData);
-        return syncData;
+      // チャンクデータの場合
+      if ('type' in parsed && parsed.type === 'chunk') {
+        // チャンクデータを一時保存
+        const key = `temp_chunk_${parsed.index}`;
+        localStorage.setItem(key, JSON.stringify(parsed));
+        
+        // 全チャンクが揃っているか確認
+        const chunks: ChunkData[] = [];
+        for (let i = 0; i < parsed.total; i++) {
+          const chunkData = localStorage.getItem(`temp_chunk_${i}`);
+          if (!chunkData) return null;
+          chunks.push(JSON.parse(chunkData));
+        }
+        
+        // チャンクを結合
+        const combinedData = chunks
+          .sort((a, b) => a.index - b.index)
+          .map(chunk => {
+            // チェックサム検証
+            if (this.calculateSimpleChecksum(chunk.data) !== chunk.checksum) {
+              throw new Error(`チャンク${chunk.index}のチェックサムが一致しません`);
+            }
+            return chunk.data;
+          })
+          .join('');
+        
+        // 一時データを削除
+        for (let i = 0; i < parsed.total; i++) {
+          localStorage.removeItem(`temp_chunk_${i}`);
+        }
+        
+        return JSON.parse(combinedData);
       }
+      
+      // 単一QRコードの場合
+      return parsed as SyncData;
     } catch (error) {
       console.error('QRコード読み取りエラー:', error);
-      throw error;
+      return null;
     }
   }
 
