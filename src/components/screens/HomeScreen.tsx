@@ -251,16 +251,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     });
 
     // Count tags from both items and groups
-    const counts = Object.fromEntries([]);
+    const counts: Record<string, number> = {};
     itemsArray.forEach(item => {
-      (item.tags || []).forEach(tag => {
-        counts[tag] = (counts[tag] || 0) + 1;
-      });
+      if (Array.isArray(item.tags)) {
+        item.tags.forEach(tag => {
+          counts[tag] = (counts[tag] || 0) + 1;
+        });
+      }
     });
     groupsArray.forEach(group => {
-      (group.tags || []).forEach(tag => {
-        counts[tag] = (counts[tag] || 0) + 1;
-      });
+      if (Array.isArray(group.tags)) {
+        group.tags.forEach(tag => {
+          counts[tag] = (counts[tag] || 0) + 1;
+        });
+      }
     });
 
     return {

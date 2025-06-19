@@ -143,12 +143,14 @@ export async function saveAppIcon(blob: Blob): Promise<string | null> {
   }
 }
 
-export const getAppIcon = async (): Promise<Blob | null> => {
-  const database = await initDB();
-  return database.get(DATA_STORE, 'app_icon');
+export const getAppIcon = (): string | null => {
+  return localStorage.getItem('app_icon');
 };
 
-export const removeAppIcon = async () => {
-  const database = await initDB();
-  await database.delete(DATA_STORE, 'app_icon');
+export const removeAppIcon = () => {
+  localStorage.removeItem('app_icon');
+  const iconUrl = localStorage.getItem('app_icon');
+  if (iconUrl) {
+    URL.revokeObjectURL(iconUrl);
+  }
 };
