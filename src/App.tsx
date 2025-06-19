@@ -5,6 +5,7 @@ import { HomeScreen } from './components/screens/HomeScreen';
 import { UnifiedAddScreen } from './components/screens/UnifiedAddScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
 import { DetailGroupScreen } from './components/screens/DetailGroupScreen';
+import { SyncScreen } from './components/SyncScreen';
 import { loadAllData, saveAllData, saveItems, saveGroups } from './utils/storage';
 import { deleteImageBlob } from './utils/imageDB';
 
@@ -231,6 +232,7 @@ function App() {
             onImport={handleImport}
             onExport={handleExport}
             onBulkDelete={handleBulkDelete}
+            onSync={() => navigateTo({ type: 'sync' })}
           />
         );
 
@@ -269,6 +271,17 @@ function App() {
               await deleteGroup(group.id);
               navigateTo({ type: 'home' });
             }}
+          />
+        );
+
+      case 'sync':
+        return (
+          <SyncScreen
+            items={items}
+            groups={groups}
+            tags={getTags()}
+            onBack={() => navigateTo({ type: 'home' })}
+            onImport={handleImport}
           />
         );
 

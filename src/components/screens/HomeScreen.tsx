@@ -3,7 +3,7 @@ import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image, RefreshCw } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import { usePostalTags } from '../../hooks/usePostalTags';
 import { MAX_TAGS } from '../../constants/tags';
@@ -29,6 +29,7 @@ interface HomeScreenProps {
   onImport: (data: any) => void;
   onExport: () => void;
   onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
+  onSync: () => void;
 }
 
 const COLOR_PALETTE = [
@@ -106,7 +107,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onBulkTagRename,
   onImport,
   onExport,
-  onBulkDelete
+  onBulkDelete,
+  onSync
 }) => {
   const {
     tags,
@@ -410,6 +412,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               )}
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={onSync}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="同期・バックアップ"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
               <button
                 onClick={() => setShowImportModal(true)}
                 className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"

@@ -50,7 +50,8 @@ export type Screen =
   | { type: 'home' }
   | { type: 'detail'; itemId: string }
   | { type: 'detail-group'; groupId: string }
-  | { type: 'add'; mode: 'unified' };
+  | { type: 'add'; mode: 'unified' }
+  | { type: 'sync' };
 
 // アプリケーションの状態
 export interface AppState {
@@ -58,7 +59,7 @@ export interface AppState {
 }
 
 export interface HomeScreenProps {
-  items: PostalItem[];
+  items: PhotoItem[];
   groups: PostalItemGroup[];
   searchQuery: string;
   selectedTags: string[];
