@@ -75,16 +75,16 @@ export class SyncManager {
         id: item.id,
         tags: item.tags,
         memo: item.memo,
-        createdAt: new Date(item.createdAt).getTime(),
-        updatedAt: new Date(item.updatedAt).getTime()
+        createdAt: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
+        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
       })),
       groups: groups.map(group => ({
         id: group.id,
         title: group.title,
         tags: group.tags,
         memo: group.memo,
-        createdAt: new Date(group.createdAt).getTime(),
-        updatedAt: new Date(group.updatedAt).getTime(),
+        createdAt: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
+        updatedAt: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
         photos: group.photos.map(photo => ({
           id: photo.id,
           tags: photo.tags,
@@ -368,7 +368,11 @@ export class SyncManager {
     body: string;
     attachment?: Blob;
   }> {
-    const timestamp = new Date(syncData.timestamp).toLocaleString('ja-JP');
+    if (!syncData || !syncData.data) {
+      throw new Error('バックアップデータが無効です');
+    }
+
+    const timestamp = new Date(syncData.timestamp || Date.now()).toLocaleString('ja-JP');
     const deviceName = this.deviceName;
     
     const subject = `[Snap Organizer] データバックアップ - ${deviceName} - ${timestamp}`;
@@ -380,54 +384,48 @@ export class SyncManager {
       qrCodeHtml = qrCodes.map((qrCode, index) => `
 <div style="margin: 20px 0;">
   <p style="color: #666;">QRコード ${qrCodes.length > 1 ? `(${index + 1}/${qrCodes.length})` : ''}</p>
-  <img src="${qrCode}" alt="同期用QRコード" style="width: 300px; height: 300px;">
+  <img src="${qrCode}" alt="同期用QRコード" style="width: 200px; height: 200px;">
 </div>`).join('');
     } catch (error) {
       console.error('QRコード生成エラー:', error);
-      qrCodeHtml = '<p style="color: red;">※ QRコードの生成に失敗しました</p>';
+      qrCodeHtml = '<p style="color: red;">QRコードの生成に失敗しました</p>';
     }
-    
+
     const body = `
 <html>
 <body style="font-family: sans-serif;">
-  <h1 style="color: #333;">Snap Organizer データバックアップ</h1>
+<h1 style="color: #333;">Snap Organizer データバックアップ</h1>
 
-  <div style="margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
-    <p>デバイス: ${deviceName} - ${timestamp}</p>
-    <p>アイテム数: ${syncData.data.items.length}</p>
-    <p>グループ数: ${syncData.data.groups.length}</p>
-    <p>タグ数: ${syncData.data.tags.length}</p>
-  </div>
+<div style="margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+  <p>デバイス: ${deviceName} - ${timestamp}</p>
+  <p>アイテム数: ${syncData.data.items.length}</p>
+  <p>グループ数: ${syncData.data.groups.length}</p>
+  <p>タグ数: ${syncData.data.tags.length}</p>
+</div>
 
-  <div style="margin: 20px 0;">
-    <p>このメールには、アプリのデータが添付されています。</p>
-    <p>新しいデバイスで以下のいずれかの方法でデータを復元できます：</p>
-    <ul>
-      <li>下記のQRコードを読み取る</li>
-      <li>添付ファイルをインポートする</li>
-    </ul>
-  </div>
+<div style="margin: 20px 0;">
+  <p>このメールには、アプリのデータが添付されています。</p>
+  <p>新しいデバイスで以下のいずれかの方法でデータを復元できます：</p>
+  <ul>
+    <li>下記のQRコードを読み取る</li>
+    <li>添付ファイルをインポートする</li>
+  </ul>
+</div>
 
-  ${qrCodeHtml}
+${qrCodeHtml}
 
-  <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-  <p style="color: #666;">
-    Snap Organizer<br>
-    From: eightchip@yahoo.co.jp
-  </p>
+<hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+<p style="color: #666;">
+  Snap Organizer<br>
+  From: eightchip@yahoo.co.jp
+</p>
 </body>
 </html>`;
 
     // データをファイルとして添付
-    const dataBlob = new Blob([JSON.stringify(syncData, null, 2)], {
-      type: 'application/json'
-    });
+    const attachment = new Blob([JSON.stringify(syncData)], { type: 'application/json' });
 
-    return {
-      subject,
-      body,
-      attachment: dataBlob
-    };
+    return { subject, body, attachment };
   }
 
   // データの圧縮（旧版 - 後方互換性のため保持）
