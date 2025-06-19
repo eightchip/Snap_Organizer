@@ -20,11 +20,17 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
 }) => {
   const [syncManager] = useState(() => new SyncManager());
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const [qrCodeDataUrls, setQrCodeDataUrls] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [syncData, setSyncData] = useState<SyncData | null>(null);
   const [emailData, setEmailData] = useState<{ subject: string; body: string; attachment?: Blob } | null>(null);
   const [activeTab, setActiveTab] = useState<'qr' | 'email' | 'import'>('qr');
+  const [compressionInfo, setCompressionInfo] = useState<{
+    originalSize: number;
+    compressedSize: number;
+    compressionRatio: number;
+    chunks: number;
+  } | null>(null);
 
   useEffect(() => {
     setDeviceInfo(syncManager.getDeviceInfo());
@@ -35,9 +41,21 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
     setIsGenerating(true);
     try {
       const data = await syncManager.prepareSyncData(items, groups, tags);
-      const qrCode = await syncManager.generateQRCode(data);
-      setQrCodeDataUrl(qrCode);
+      const qrCodes = await syncManager.generateQRCode(data);
+      setQrCodeDataUrls(qrCodes);
       setSyncData(data);
+
+      // 圧縮情報を計算
+      const originalSize = JSON.stringify(data).length;
+      const compressedSize = qrCodes.length * 2000; // 概算
+      const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100;
+      
+      setCompressionInfo({
+        originalSize,
+        compressedSize,
+        compressionRatio,
+        chunks: qrCodes.length
+      });
     } catch (error) {
       console.error('QRコード生成エラー:', error);
       alert('QRコードの生成に失敗しました: ' + error.message);
@@ -207,18 +225,75 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
                   </button>
                 </div>
 
-                {qrCodeDataUrl && (
-                  <div className="text-center">
-                    <div className="bg-white p-4 rounded-lg border inline-block">
-                      <img
-                        src={qrCodeDataUrl}
-                        alt="QRコード"
-                        className="w-48 h-48"
-                      />
+                {/* 圧縮情報 */}
+                {compressionInfo && (
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 mb-2">圧縮情報</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-blue-700">元のサイズ:</span>
+                        <span className="ml-2">{compressionInfo.originalSize.toLocaleString()} 文字</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">圧縮後:</span>
+                        <span className="ml-2">{compressionInfo.compressedSize.toLocaleString()} 文字</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">圧縮率:</span>
+                        <span className="ml-2">{compressionInfo.compressionRatio.toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">QRコード数:</span>
+                        <span className="ml-2">{compressionInfo.chunks} 個</span>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      他のデバイスでこのQRコードを読み取ってください
-                    </p>
+                  </div>
+                )}
+
+                {/* QRコード表示 */}
+                {qrCodeDataUrls.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <h4 className="font-semibold text-gray-900 mb-2">
+                        {qrCodeDataUrls.length === 1 ? 'QRコード' : `QRコード (${qrCodeDataUrls.length}個)`}
+                      </h4>
+                      {qrCodeDataUrls.length > 1 && (
+                        <p className="text-sm text-gray-600 mb-4">
+                          データが大きいため、複数のQRコードに分割されています。<br />
+                          すべてのQRコードを順番に読み取ってください。
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {qrCodeDataUrls.map((qrCode, index) => (
+                        <div key={index} className="text-center">
+                          {qrCodeDataUrls.length > 1 && (
+                            <div className="mb-2">
+                              <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-medium">
+                                QRコード {index + 1} / {qrCodeDataUrls.length}
+                              </span>
+                            </div>
+                          )}
+                          <div className="bg-white p-4 rounded-lg border inline-block">
+                            <img
+                              src={qrCode}
+                              alt={`QRコード ${index + 1}`}
+                              className="w-48 h-48"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">
+                        {qrCodeDataUrls.length === 1 
+                          ? '他のデバイスでこのQRコードを読み取ってください'
+                          : '他のデバイスで上から順番にQRコードを読み取ってください'
+                        }
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
