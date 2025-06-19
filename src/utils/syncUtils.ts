@@ -26,20 +26,50 @@ export interface DeviceInfo {
   dataVersion: string;
 }
 
+interface CompressedSyncData {
+  v: string;      // version
+  ts: number;     // timestamp
+  did: string;    // deviceId
+  d: {           // data
+    i: Array<{   // items
+      i: string; // id
+      t: string[]; // tags
+      m: string; // memo
+      c: number; // createdAt
+      u: number; // updatedAt
+    }>;
+    g: Array<{   // groups
+      i: string; // id
+      t: string; // title
+      g: string[]; // tags
+      m: string; // memo
+      c: number; // createdAt
+      u: number; // updatedAt
+      p: Array<{ // photos
+        i: string; // id
+        t: string[]; // tags
+        m: string; // memo
+      }>;
+    }>;
+    t: any[];    // tags
+  };
+  c: string;     // checksum
+}
+
 interface ChunkData {
-  type: 'chunk';
-  total: number;
-  index: number;
-  data: string;
-  checksum: string;
+  t: 'c';        // type: chunk
+  n: number;     // total number
+  i: number;     // index
+  d: string;     // data
+  h: string;     // hash
 }
 
 export class SyncManager {
   private deviceId: string;
   private deviceName: string;
-  private readonly MAX_QR_SIZE = 500; // QRコードの最大サイズを500バイトに縮小
-  private readonly CHUNK_HEADER_SIZE = 50; // チャンクヘッダーのサイズ
-  private readonly MAX_QR_CHUNKS = 4; // 最大分割数
+  private readonly MAX_QR_SIZE = 300; // QRコードの最大サイズを300バイトに縮小
+  private readonly CHUNK_HEADER_SIZE = 30; // チャンクヘッダーのサイズを最適化
+  private readonly MAX_QR_CHUNKS = 8; // 最大分割数を8に増加
 
   constructor() {
     this.deviceId = this.getOrCreateDeviceId();
@@ -68,41 +98,41 @@ export class SyncManager {
   }
 
   // データの準備（高度な圧縮）
-  async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<SyncData> {
-    // 必要最小限のデータのみを含める
+  async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<CompressedSyncData> {
+    // さらにデータを最小化
     const minimalData = {
-      items: items.map(item => ({
-        id: item.id,
-        tags: item.tags,
-        memo: item.memo,
-        createdAt: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
-        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
+      i: items.map(item => ({
+        i: item.id,
+        t: item.tags,
+        m: item.memo,
+        c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
+        u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
       })),
-      groups: groups.map(group => ({
-        id: group.id,
-        title: group.title,
-        tags: group.tags,
-        memo: group.memo,
-        createdAt: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
-        updatedAt: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
-        photos: group.photos.map(photo => ({
-          id: photo.id,
-          tags: photo.tags,
-          memo: photo.memo
+      g: groups.map(group => ({
+        i: group.id,
+        t: group.title,
+        g: group.tags,
+        m: group.memo,
+        c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
+        u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
+        p: group.photos.map(photo => ({
+          i: photo.id,
+          t: photo.tags,
+          m: photo.memo
         }))
       })),
-      tags
+      t: tags
     };
 
     // チェックサムを計算
     const checksum = await this.calculateChecksum(JSON.stringify(minimalData));
 
     return {
-      version: '1.0',
-      timestamp: Date.now(),
-      deviceId: this.deviceId,
-      data: minimalData,
-      checksum
+      v: '1.0',
+      ts: Date.now(),
+      did: this.deviceId,
+      d: minimalData,
+      c: checksum
     };
   }
 
@@ -205,18 +235,6 @@ export class SyncManager {
       const jsonData = JSON.stringify(syncData);
       console.log('QRコード生成: 元データサイズ', jsonData.length);
 
-      // データサイズが小さい場合は単一QRコード
-      if (jsonData.length <= this.MAX_QR_SIZE) {
-        console.log('単一QRコードで生成');
-        const qrCodeDataUrl = await QRCode.toDataURL(jsonData, {
-          width: 200,
-          margin: 1,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#000000', light: '#FFFFFF' }
-        });
-        return [qrCodeDataUrl];
-      }
-
       // データを分割
       const chunks = this.splitIntoChunks(jsonData);
       console.log(`${chunks.length}個のチャンクに分割`);
@@ -228,15 +246,15 @@ export class SyncManager {
       // 各チャンクをQRコード化
       const qrCodes = await Promise.all(chunks.map(async (chunk, index) => {
         const chunkData = {
-          type: 'chunk',
-          total: chunks.length,
-          index: index,
-          data: chunk,
-          checksum: this.calculateSimpleChecksum(chunk)
+          t: 'c', // type: chunk
+          n: chunks.length, // total number
+          i: index, // index
+          d: chunk, // data
+          h: this.calculateSimpleChecksum(chunk) // hash
         };
         
         return QRCode.toDataURL(JSON.stringify(chunkData), {
-          width: 200,
+          width: 180, // サイズを少し小さく
           margin: 1,
           errorCorrectionLevel: 'M',
           color: { dark: '#000000', light: '#FFFFFF' }
@@ -318,17 +336,17 @@ export class SyncManager {
   // QRコードからデータを読み取り
   async readQRCode(qrData: string): Promise<SyncData | null> {
     try {
-      const parsed = JSON.parse(qrData) as ChunkData | SyncData;
+      const parsed = JSON.parse(qrData) as ChunkData | CompressedSyncData;
       
       // チャンクデータの場合
-      if ('type' in parsed && parsed.type === 'chunk') {
+      if ('t' in parsed && parsed.t === 'c') {
         // チャンクデータを一時保存
-        const key = `temp_chunk_${parsed.index}`;
+        const key = `temp_chunk_${parsed.i}`;
         localStorage.setItem(key, JSON.stringify(parsed));
         
         // 全チャンクが揃っているか確認
         const chunks: ChunkData[] = [];
-        for (let i = 0; i < parsed.total; i++) {
+        for (let i = 0; i < parsed.n; i++) {
           const chunkData = localStorage.getItem(`temp_chunk_${i}`);
           if (!chunkData) return null;
           chunks.push(JSON.parse(chunkData));
@@ -336,30 +354,64 @@ export class SyncManager {
         
         // チャンクを結合
         const combinedData = chunks
-          .sort((a, b) => a.index - b.index)
+          .sort((a, b) => a.i - b.i)
           .map(chunk => {
             // チェックサム検証
-            if (this.calculateSimpleChecksum(chunk.data) !== chunk.checksum) {
-              throw new Error(`チャンク${chunk.index}のチェックサムが一致しません`);
+            if (this.calculateSimpleChecksum(chunk.d) !== chunk.h) {
+              throw new Error(`チャンク${chunk.i}のチェックサムが一致しません`);
             }
-            return chunk.data;
+            return chunk.d;
           })
           .join('');
         
         // 一時データを削除
-        for (let i = 0; i < parsed.total; i++) {
+        for (let i = 0; i < parsed.n; i++) {
           localStorage.removeItem(`temp_chunk_${i}`);
         }
         
-        return JSON.parse(combinedData);
+        const fullData = JSON.parse(combinedData) as CompressedSyncData;
+        return this.expandSyncData(fullData);
       }
       
       // 単一QRコードの場合
-      return parsed as SyncData;
+      return this.expandSyncData(parsed as CompressedSyncData);
     } catch (error) {
       console.error('QRコード読み取りエラー:', error);
       return null;
     }
+  }
+
+  // 圧縮されたデータを展開
+  private expandSyncData(data: any): SyncData {
+    return {
+      version: data.v,
+      timestamp: data.ts,
+      deviceId: data.did,
+      data: {
+        items: data.d.i.map((item: any) => ({
+          id: item.i,
+          tags: item.t,
+          memo: item.m,
+          createdAt: new Date(item.c),
+          updatedAt: new Date(item.u)
+        })),
+        groups: data.d.g.map((group: any) => ({
+          id: group.i,
+          title: group.t,
+          tags: group.g,
+          memo: group.m,
+          createdAt: new Date(group.c),
+          updatedAt: new Date(group.u),
+          photos: group.p.map((photo: any) => ({
+            id: photo.i,
+            tags: photo.t,
+            memo: photo.m
+          }))
+        })),
+        tags: data.d.t
+      },
+      checksum: data.c
+    };
   }
 
   // メールバックアップの生成
