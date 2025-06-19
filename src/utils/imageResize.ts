@@ -1,25 +1,55 @@
-import init, { preprocess_image, preprocess_image_color } from '../pkg/your_wasm_pkg';
-import EXIF from 'exif-js';
+// WASMファイルの条件付きインポート
+let wasmModule: any = null;
+let wasmInitialized = false;
 
-declare module '../pkg/your_wasm_pkg' {
-  export function preprocess_image(image_data: Uint8Array): Uint8Array;
-  export function preprocess_image_color(image_data: Uint8Array): Uint8Array;
-  export default function init(): Promise<void>;
+// WASMモジュールの動的インポート
+async function loadWasmModule() {
+  if (!wasmModule) {
+    try {
+      // ブラウザ環境でのみWASMを読み込み
+      if (typeof window !== 'undefined') {
+        const module = await import('../pkg/your_wasm_pkg');
+        wasmModule = module;
+      }
+    } catch (error) {
+      console.warn('WASM module not available, falling back to canvas processing:', error);
+      wasmModule = null;
+    }
+  }
+  return wasmModule;
 }
 
-let wasmInitialized = false;
+// EXIFライブラリの条件付きインポート
+let EXIF: any = null;
+async function loadExif() {
+  if (!EXIF) {
+    try {
+      EXIF = await import('exif-js');
+    } catch (error) {
+      console.warn('EXIF library not available:', error);
+      EXIF = null;
+    }
+  }
+  return EXIF;
+}
+
 const PROCESSING_TIMEOUT = 30000; // 30秒タイムアウト
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 
 async function initializeWasm() {
   if (!wasmInitialized) {
     try {
-      await init();
-      wasmInitialized = true;
-      console.log('WebAssembly initialized successfully');
+      const module = await loadWasmModule();
+      if (module && module.default) {
+        await module.default();
+        wasmInitialized = true;
+        console.log('WebAssembly initialized successfully');
+      } else {
+        console.warn('WASM module not available, using canvas processing only');
+      }
     } catch (error) {
       console.error('Failed to initialize WebAssembly:', error);
-      throw new Error('画像処理の初期化に失敗しました');
+      console.warn('Falling back to canvas processing only');
     }
   }
 }
@@ -132,21 +162,27 @@ export async function resizeImage(
     console.log(`Resizing image to ${maxWidth}x${maxHeight} with quality ${quality}`);
     const resizedBase64 = await resizeImageWithCanvas(validatedImage, maxWidth, maxHeight, quality);
 
-    // カラー処理を適用
-    console.log('Applying color processing...');
-    const imageData = base64ToUint8Array(resizedBase64);
-    const processedData = await withTimeout(
-      Promise.resolve(preprocess_image_color(imageData)),
-      PROCESSING_TIMEOUT
-    );
+    // WASMが利用可能な場合のみカラー処理を適用
+    const module = await loadWasmModule();
+    if (module && module.preprocess_image_color) {
+      console.log('Applying color processing with WASM...');
+      const imageData = base64ToUint8Array(resizedBase64);
+      const processedData = await withTimeout(
+        Promise.resolve(module.preprocess_image_color(imageData)),
+        PROCESSING_TIMEOUT
+      );
 
-    if (!processedData) {
-      throw new Error('画像の処理に失敗しました');
+      if (!processedData) {
+        throw new Error('画像の処理に失敗しました');
+      }
+
+      const resultBase64 = uint8ArrayToBase64(processedData);
+      console.log('Image resize completed successfully with WASM');
+      return resultBase64;
+    } else {
+      console.log('WASM not available, using canvas processing only');
+      return resizedBase64;
     }
-
-    const resultBase64 = uint8ArrayToBase64(processedData);
-    console.log('Image resize completed successfully');
-    return resultBase64;
   } catch (error) {
     console.error('Image resize error:', error);
     if (error instanceof Error) {
@@ -165,21 +201,28 @@ export async function preprocessImageForOcr(base64Image: string): Promise<string
     console.log('Converting base64 to Uint8Array...');
     const imageData = base64ToUint8Array(validatedImage);
 
-    console.log('Processing image for OCR...');
-    const result = await withTimeout(
-      Promise.resolve(preprocess_image(imageData)),
-      PROCESSING_TIMEOUT
-    );
+    // WASMが利用可能な場合のみOCR前処理を適用
+    const module = await loadWasmModule();
+    if (module && module.preprocess_image) {
+      console.log('Processing image for OCR with WASM...');
+      const result = await withTimeout(
+        Promise.resolve(module.preprocess_image(imageData)),
+        PROCESSING_TIMEOUT
+      );
 
-    if (!result) {
-      throw new Error('OCR前処理に失敗しました');
+      if (!result) {
+        throw new Error('OCR前処理に失敗しました');
+      }
+
+      console.log('Converting result back to base64...');
+      const resultBase64 = uint8ArrayToBase64(result);
+
+      console.log('OCR preprocessing completed successfully with WASM');
+      return resultBase64;
+    } else {
+      console.log('WASM not available, returning original image');
+      return validatedImage;
     }
-
-    console.log('Converting result back to base64...');
-    const resultBase64 = uint8ArrayToBase64(result);
-
-    console.log('OCR preprocessing completed successfully');
-    return resultBase64;
   } catch (error) {
     console.error('Image preprocessing error:', error);
     if (error instanceof Error) {
