@@ -200,7 +200,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     loadImages();
 
     return () => {
-      // コンポーネントのアンマウント時にURLを解放
+      // コンポーネントのアンマウント時にURLを解放テスト変更
       Object.values(imageUrlMap).forEach(url => {
         URL.revokeObjectURL(url);
       });
