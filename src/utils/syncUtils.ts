@@ -140,89 +140,124 @@ export class SyncManager {
   // 高度なデータ圧縮
   private async compressDataAdvanced(syncData: SyncData): Promise<string> {
     try {
-      // 1. 基本的なnullチェック
-      if (!syncData) {
+      // 1. データの検証
+      if (!syncData || !syncData.data) {
         throw new Error('同期データがありません');
       }
 
-      // 2. 必須フィールドの存在チェック
-      const requiredFields = ['version', 'timestamp', 'deviceId', 'data'] as const;
-      for (const field of requiredFields) {
-        if (!syncData[field]) {
-          throw new Error(`必須フィールド '${field}' が不足しています`);
-        }
-      }
-
-      // 3. データ構造の検証
-      if (!syncData.data || typeof syncData.data !== 'object') {
-        throw new Error('同期データの内容が不正です');
-      }
-
-      // 4. 配列の検証
-      if (!Array.isArray(syncData.data.items) || !Array.isArray(syncData.data.groups)) {
-        throw new Error('items または groups が配列ではありません');
-      }
-
-      // 5. データを短縮名で再構成
-      const minimalData: CompressedSyncData = {
+      // 2. データの最小化（短いキー名を使用）
+      const minimalData = {
         v: syncData.version,
-        ts: syncData.timestamp,
-        did: syncData.deviceId,
-        d: {
-          i: syncData.data.items.map((item, index) => {
-            if (!item || typeof item !== 'object') {
-              throw new Error(`不正なアイテムデータ (index: ${index})`);
-            }
-            if (!item.id) {
-              throw new Error(`アイテムIDが不足しています (index: ${index})`);
-            }
-            return {
-              i: item.id,
-              t: Array.isArray(item.tags) ? item.tags : [],
-              m: item.memo || '',
-              c: this.normalizeTimestamp(item.createdAt),
-              u: this.normalizeTimestamp(item.updatedAt)
-            };
-          }),
-          g: syncData.data.groups.map((group, index) => {
-            if (!group || typeof group !== 'object') {
-              throw new Error(`不正なグループデータ (index: ${index})`);
-            }
-            if (!group.id) {
-              throw new Error(`グループIDが不足しています (index: ${index})`);
-            }
-            return {
-              i: group.id,
-              t: group.title || '',
-              m: group.memo || '',
-              g: Array.isArray(group.tags) ? group.tags : [],
-              c: this.normalizeTimestamp(group.createdAt),
-              u: this.normalizeTimestamp(group.updatedAt),
-              p: Array.isArray(group.photos) ? group.photos.map((photo, photoIndex) => {
-                if (!photo || typeof photo !== 'object') {
-                  throw new Error(`不正な写真データ (group: ${index}, photo: ${photoIndex})`);
-                }
-                if (!photo.id) {
-                  throw new Error(`写真IDが不足しています (group: ${index}, photo: ${photoIndex})`);
-                }
-                return {
-                  i: photo.id,
-                  t: Array.isArray(photo.tags) ? photo.tags : [],
-                  m: photo.memo || ''
-                };
-              }) : []
-            };
-          }),
-          t: syncData.data.tags
-        },
-        c: syncData.checksum
+        t: syncData.timestamp,
+        d: syncData.deviceId,
+        i: syncData.data.items.map(item => [
+          item.id,
+          item.tags || [],
+          item.memo || '',
+          this.normalizeTimestamp(item.createdAt),
+          this.normalizeTimestamp(item.updatedAt)
+        ]),
+        g: syncData.data.groups.map(group => [
+          group.id,
+          group.title || '',
+          group.tags || [],
+          group.memo || '',
+          this.normalizeTimestamp(group.createdAt),
+          this.normalizeTimestamp(group.updatedAt),
+          (group.photos || []).map(photo => [
+            photo.id,
+            photo.tags || [],
+            photo.memo || ''
+          ])
+        ]),
+        tg: syncData.data.tags || []
       };
 
-      // 6. JSONに変換して返す
-      return JSON.stringify(minimalData);
+      // 3. 文字列に変換
+      const jsonStr = JSON.stringify(minimalData);
+
+      // 4. LZ圧縮を適用
+      const compressedData = await this.compressWithLZ(jsonStr);
+
+      return compressedData;
     } catch (error) {
       console.error('データ圧縮エラー:', error);
       throw new Error(`データの圧縮に失敗しました: ${error.message}`);
+    }
+  }
+
+  private async compressWithLZ(data: string): Promise<string> {
+    // LZ-stringライブラリを使用してデータを圧縮
+    const compressed = this.lzCompress(data);
+    return compressed;
+  }
+
+  private lzCompress(input: string): string {
+    // 簡易LZ77圧縮の実装
+    const dictionary: { [key: string]: number } = {};
+    let result = '';
+    let phrase = '';
+    
+    for (let i = 0; i < input.length; i++) {
+      const char = input[i];
+      const newPhrase = phrase + char;
+      
+      if (dictionary[newPhrase] !== undefined) {
+        phrase = newPhrase;
+      } else {
+        if (phrase !== '') {
+          const code = dictionary[phrase] !== undefined ? dictionary[phrase].toString(36) : phrase;
+          result += `${code.length},${code}`;
+        }
+        dictionary[newPhrase] = Object.keys(dictionary).length;
+        phrase = char;
+      }
+    }
+    
+    if (phrase !== '') {
+      const code = dictionary[phrase] !== undefined ? dictionary[phrase].toString(36) : phrase;
+      result += `${code.length},${code}`;
+    }
+    
+    // 圧縮結果が元のデータより大きい場合は元のデータを返す
+    return result.length < input.length ? result : input;
+  }
+
+  private async decompressWithLZ(compressed: string): Promise<string> {
+    try {
+      // 圧縮されていない場合はそのまま返す
+      if (!compressed.includes(',')) {
+        return compressed;
+      }
+
+      // LZ77圧縮の展開
+      const dictionary: string[] = [];
+      let result = '';
+      let i = 0;
+
+      while (i < compressed.length) {
+        const lengthEnd = compressed.indexOf(',', i);
+        const length = parseInt(compressed.slice(i, lengthEnd));
+        const code = compressed.slice(lengthEnd + 1, lengthEnd + 1 + length);
+        
+        if (code.match(/^[0-9a-z]+$/)) {
+          const index = parseInt(code, 36);
+          result += dictionary[index] || code;
+        } else {
+          result += code;
+        }
+        
+        if (result.length > 0) {
+          dictionary.push(result);
+        }
+        
+        i = lengthEnd + 1 + length;
+      }
+
+      return result;
+    } catch (error) {
+      console.error('解凍エラー:', error);
+      throw new Error('データの解凍に失敗しました');
     }
   }
 
@@ -319,7 +354,17 @@ export class SyncManager {
       });
 
       const results = await Promise.all(qrPromises);
-      console.log(`QRコード生成完了: ${results.length}個のQRコードを生成しました`);
+      
+      // 圧縮率の計算と表示
+      const originalSize = JSON.stringify(syncData).length;
+      const compressedSize = compressedData.length;
+      const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100;
+      console.log(`圧縮情報:
+        元のサイズ: ${originalSize} バイト
+        圧縮後: ${compressedSize} バイト
+        圧縮率: ${compressionRatio.toFixed(1)}%
+        QRコード数: ${results.length}個`);
+
       return results;
     } catch (error) {
       console.error('QRコード生成エラー:', error);
@@ -343,7 +388,7 @@ export class SyncManager {
         combinedData += chunk.d;
       }
       // データを解凍
-      const decompressedData = await this.decompressDataAdvanced(combinedData);
+      const decompressedData = await this.decompressWithLZ(combinedData);
       // 展開
       return this.expandSyncData(JSON.parse(decompressedData));
     } catch (error) {
@@ -449,7 +494,7 @@ export class SyncManager {
             memo: photo.m
           }))
         })),
-        tags: data.d.t
+        tags: data.d.tg
       },
       checksum: data.c
     };
