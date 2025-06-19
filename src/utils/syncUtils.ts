@@ -137,130 +137,86 @@ export class SyncManager {
   }
 
   // 高度なデータ圧縮
-  private async compressDataAdvanced(data: string): Promise<string> {
+  private async compressDataAdvanced(syncData: SyncData): Promise<string> {
     try {
-      // 1. 不要な空白と改行を削除
-      const minified = JSON.stringify(JSON.parse(data));
-      
-      // 2. 長い文字列の短縮（画像データは除外）
-      const shortened = this.shortenData(minified);
-      
-      // 3. Base64エンコード（URLセーフな形式で）
-      const encoded = btoa(shortened)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-      
-      return encoded;
+      // 1. データを短縮名で再構成
+      const minimalData = {
+        v: syncData.version,
+        ts: syncData.timestamp,
+        did: syncData.deviceId,
+        d: {
+          i: syncData.data.items.map(item => ({
+            i: item.id,
+            t: item.tags,
+            m: item.memo,
+            c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
+            u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
+          })),
+          g: syncData.data.groups.map(group => ({
+            i: group.id,
+            t: group.title,
+            g: group.tags,
+            m: group.memo,
+            c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
+            u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
+            p: group.photos.map(photo => ({
+              i: photo.id,
+              t: photo.tags,
+              m: photo.memo
+            }))
+          })),
+          t: syncData.data.tags
+        },
+        c: syncData.checksum
+      };
+      // 2. JSON文字列化
+      const minified = JSON.stringify(minimalData);
+      // 3. Base64エンコード（1回のみ）
+      return btoa(minified).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     } catch (error) {
       console.error('圧縮エラー:', error);
       throw error;
     }
   }
 
-  // データの短縮
-  private shortenData(data: string): string {
-    try {
-      const parsed = JSON.parse(data);
-      
-      // 日付を短い形式に変換
-      const convertDates = (obj: any) => {
-        if (obj.createdAt) {
-          obj.createdAt = new Date(obj.createdAt).getTime();
-        }
-        if (obj.updatedAt) {
-          obj.updatedAt = new Date(obj.updatedAt).getTime();
-        }
-        return obj;
-      };
-
-      // アイテムの処理
-      if (parsed.items) {
-        parsed.items = parsed.items.map((item: any) => convertDates(item));
-      }
-
-      // グループの処理
-      if (parsed.groups) {
-        parsed.groups = parsed.groups.map((group: any) => {
-          group = convertDates(group);
-          if (group.photos) {
-            group.photos = group.photos.map((photo: any) => convertDates(photo));
-          }
-          return group;
-        });
-      }
-
-      return JSON.stringify(parsed);
-    } catch (error) {
-      console.warn('データ短縮に失敗、元のデータを使用:', error);
-      return data;
-    }
-  }
-
-  // データをチャンクに分割
-  private splitDataIntoChunks(data: string): SyncChunk[] {
-    const chunks: SyncChunk[] = [];
-    const totalChunks = Math.ceil(data.length / this.MAX_QR_SIZE);
-
+  // データをチャンクに分割（短縮名ヘッダー）
+  private splitDataIntoChunks(data: string): Array<{ i: number; n: number; d: string; h: string }> {
+    const MAX_QR_SIZE = this.MAX_QR_SIZE;
+    const totalChunks = Math.ceil(data.length / MAX_QR_SIZE);
+    const chunks: Array<{ i: number; n: number; d: string; h: string }> = [];
     for (let i = 0; i < totalChunks; i++) {
-      const start = i * this.MAX_QR_SIZE;
-      const end = Math.min(start + this.MAX_QR_SIZE, data.length);
+      const start = i * MAX_QR_SIZE;
+      const end = Math.min(start + MAX_QR_SIZE, data.length);
       const chunkData = data.substring(start, end);
-
       chunks.push({
-        chunkIndex: i,
-        totalChunks,
-        data: chunkData,
-        checksum: this.calculateSimpleChecksum(chunkData)
+        i,
+        n: totalChunks,
+        d: chunkData,
+        h: this.calculateSimpleChecksum(chunkData)
       });
     }
-
     return chunks;
   }
 
-  // 簡単なチェックサム計算
-  private calculateSimpleChecksum(data: string): string {
-    let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-      const char = data.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // 32bit整数に変換
-    }
-    return Math.abs(hash).toString(36);
-  }
-
-  // QRコードの生成（分割対応）
+  // QRコードの生成（圧縮→分割→QR化）
   async generateQRCode(syncData: SyncData): Promise<string[]> {
     try {
-      const jsonData = JSON.stringify(syncData);
-      console.log('QRコード生成: 元データサイズ', jsonData.length);
-
-      // データを分割
-      const chunks = this.splitIntoChunks(jsonData);
-      console.log(`${chunks.length}個のチャンクに分割`);
-
+      // 圧縮
+      const compressed = await this.compressDataAdvanced(syncData);
+      // 分割
+      const chunks = this.splitDataIntoChunks(compressed);
       if (chunks.length > this.MAX_QR_CHUNKS) {
         throw new Error(`データが大きすぎます（${chunks.length}分割が必要）`);
       }
-
-      // 各チャンクをQRコード化
-      const qrCodes = await Promise.all(chunks.map(async (chunk, index) => {
-        const chunkData = {
-          t: 'c', // type: chunk
-          n: chunks.length, // total number
-          i: index, // index
-          d: chunk, // data
-          h: this.calculateSimpleChecksum(chunk) // hash
-        };
-        
-        return QRCode.toDataURL(JSON.stringify(chunkData), {
-          width: 180, // サイズを少し小さく
+      // QRコード化
+      const qrCodes = await Promise.all(chunks.map(async (chunk) => {
+        return QRCode.toDataURL(JSON.stringify(chunk), {
+          width: 180,
           margin: 1,
           errorCorrectionLevel: 'M',
           color: { dark: '#000000', light: '#FFFFFF' }
         });
       }));
-
       return qrCodes;
     } catch (error) {
       console.error('QRコード生成エラー:', error);
@@ -268,43 +224,25 @@ export class SyncManager {
     }
   }
 
-  // データを適切なサイズのチャンクに分割
-  private splitIntoChunks(data: string): string[] {
-    const chunks: string[] = [];
-    const chunkSize = this.MAX_QR_SIZE - this.CHUNK_HEADER_SIZE;
-    
-    for (let i = 0; i < data.length; i += chunkSize) {
-      chunks.push(data.slice(i, i + chunkSize));
-    }
-    
-    return chunks;
-  }
-
   // 複数のQRコードからデータを復元
-  async reconstructDataFromChunks(chunks: SyncChunk[]): Promise<SyncData> {
+  async reconstructDataFromChunks(chunks: { i: number; n: number; d: string; h: string }[]): Promise<SyncData> {
     try {
       // チャンクを順序通りに並べ替え
-      const sortedChunks = chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
-      
+      const sortedChunks = chunks.sort((a, b) => a.i - b.i);
       // データを結合
       let combinedData = '';
       for (const chunk of sortedChunks) {
         // チェックサムを検証
-        const calculatedChecksum = this.calculateSimpleChecksum(chunk.data);
-        if (calculatedChecksum !== chunk.checksum) {
-          throw new Error(`チャンク ${chunk.chunkIndex} のデータが破損しています`);
+        const calculatedChecksum = this.calculateSimpleChecksum(chunk.d);
+        if (calculatedChecksum !== chunk.h) {
+          throw new Error(`チャンク ${chunk.i} のデータが破損しています`);
         }
-        combinedData += chunk.data;
+        combinedData += chunk.d;
       }
-
       // データを解凍
       const decompressedData = await this.decompressDataAdvanced(combinedData);
-      const syncData: SyncData = JSON.parse(decompressedData);
-      
-      // データの検証
-      await this.validateSyncData(syncData);
-      
-      return syncData;
+      // 展開
+      return this.expandSyncData(JSON.parse(decompressedData));
     } catch (error) {
       console.error('データ復元エラー:', error);
       throw error;
@@ -538,5 +476,16 @@ ${qrCodeHtml}
       lastSync: parseInt(localStorage.getItem('last_sync') || '0'),
       dataVersion: '1.0'
     };
+  }
+
+  // 簡易チェックサム（32bit整数を36進数文字列で返す）
+  private calculateSimpleChecksum(data: string): string {
+    let hash = 0;
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // 32bit整数に変換
+    }
+    return Math.abs(hash).toString(36);
   }
 } 
