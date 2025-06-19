@@ -145,45 +145,48 @@ export class SyncManager {
         throw new Error('同期データがありません');
       }
 
-      // 2. データの最小化（短いキー名を使用）
+      // 2. データの最小化（さらに短いキー名を使用）
       const minimalData = {
         v: syncData.version,
         t: syncData.timestamp,
         d: syncData.deviceId,
-        i: syncData.data.items.map(item => ({
-          i: item.id,
-          t: item.tags || [],
-          m: item.memo || '',
-          c: this.normalizeTimestamp(item.createdAt),
-          u: this.normalizeTimestamp(item.updatedAt)
-        })),
-        g: syncData.data.groups.map(group => ({
-          i: group.id,
-          t: group.title || '',
-          g: group.tags || [],
-          m: group.memo || '',
-          c: this.normalizeTimestamp(group.createdAt),
-          u: this.normalizeTimestamp(group.updatedAt),
-          p: (group.photos || []).map(photo => ({
-            i: photo.id,
-            t: photo.tags || [],
-            m: photo.memo || ''
-          }))
-        })),
+        i: syncData.data.items.map(item => [
+          item.id,
+          item.tags || [],
+          item.memo || '',
+          this.normalizeTimestamp(item.createdAt),
+          this.normalizeTimestamp(item.updatedAt)
+        ]),
+        g: syncData.data.groups.map(group => [
+          group.id,
+          group.title || '',
+          group.tags || [],
+          group.memo || '',
+          this.normalizeTimestamp(group.createdAt),
+          this.normalizeTimestamp(group.updatedAt),
+          (group.photos || []).map(photo => [
+            photo.id,
+            photo.tags || [],
+            photo.memo || ''
+          ])
+        ]),
         tg: syncData.data.tags || []
       };
 
-      // 3. 文字列に変換
-      const jsonStr = JSON.stringify(minimalData);
+      // 3. 文字列に変換（空白を除去）
+      const jsonStr = JSON.stringify(minimalData).replace(/\s+/g, '');
 
-      // 4. Base64エンコード
-      const base64Data = btoa(encodeURIComponent(jsonStr));
+      // 4. データを圧縮
+      const compressedStr = await this.lzStringCompress(jsonStr);
 
-      // 5. サイズ情報を記録
+      // 5. Base64エンコード
+      const base64Data = btoa(compressedStr);
+
+      // 6. サイズ情報を記録
       this.compressionInfo = {
         originalSize: JSON.stringify(syncData).length,
         compressedSize: base64Data.length,
-        format: 'base64'
+        format: 'lz-base64'
       };
 
       return base64Data;
@@ -191,6 +194,62 @@ export class SyncManager {
       console.error('データ圧縮エラー:', error);
       throw new Error(`データの圧縮に失敗しました: ${error.message}`);
     }
+  }
+
+  private lzStringCompress(input: string): string {
+    const dictionary: { [key: string]: number } = {};
+    let dictionarySize = 256;
+    let current = '';
+    const result: string[] = [];
+    
+    for (let i = 0; i < input.length; i++) {
+      const char = input[i];
+      const phrase = current + char;
+      
+      if (dictionary[phrase] !== undefined) {
+        current = phrase;
+      } else {
+        if (current !== '') {
+          result.push(String.fromCharCode(
+            dictionary[current] !== undefined ? dictionary[current] : current.charCodeAt(0)
+          ));
+        }
+        dictionary[phrase] = dictionarySize++;
+        current = char;
+      }
+    }
+    
+    if (current !== '') {
+      result.push(String.fromCharCode(
+        dictionary[current] !== undefined ? dictionary[current] : current.charCodeAt(0)
+      ));
+    }
+    
+    return result.join('');
+  }
+
+  private lzStringDecompress(compressed: string): string {
+    const dictionary: string[] = [];
+    let dictionarySize = 256;
+    let current = compressed[0];
+    let result = current;
+    
+    for (let i = 1; i < compressed.length; i++) {
+      const code = compressed.charCodeAt(i);
+      let entry: string;
+      
+      if (code < dictionarySize) {
+        entry = String.fromCharCode(code);
+      } else {
+        entry = current + current[0];
+      }
+      
+      result += entry;
+      dictionary[dictionarySize++] = current + entry[0];
+      current = entry;
+    }
+    
+    return result;
   }
 
   private compressionInfo: {
@@ -370,12 +429,15 @@ export class SyncManager {
       }
 
       // 3. Base64デコード
-      const jsonStr = decodeURIComponent(atob(chunk.d));
+      const compressedStr = atob(chunk.d);
       
-      // 4. JSONパース
+      // 4. 解凍
+      const jsonStr = this.lzStringDecompress(compressedStr);
+      
+      // 5. JSONパース
       const data = JSON.parse(jsonStr);
       
-      // 5. データを展開
+      // 6. データを展開
       return this.expandSyncData(data);
     } catch (error) {
       console.error('QRコード読み取りエラー:', error);
@@ -390,24 +452,24 @@ export class SyncManager {
       timestamp: data.t,
       deviceId: data.d,
       data: {
-        items: data.i.map((item: any) => ({
-          id: item.i,
-          tags: item.t,
-          memo: item.m,
-          createdAt: item.c,
-          updatedAt: item.u
+        items: data.i.map((item: any[]) => ({
+          id: item[0],
+          tags: item[1],
+          memo: item[2],
+          createdAt: item[3],
+          updatedAt: item[4]
         })),
-        groups: data.g.map((group: any) => ({
-          id: group.i,
-          title: group.t,
-          tags: group.g,
-          memo: group.m,
-          createdAt: group.c,
-          updatedAt: group.u,
-          photos: group.p.map((photo: any) => ({
-            id: photo.i,
-            tags: photo.t,
-            memo: photo.m
+        groups: data.g.map((group: any[]) => ({
+          id: group[0],
+          title: group[1],
+          tags: group[2],
+          memo: group[3],
+          createdAt: group[4],
+          updatedAt: group[5],
+          photos: group[6].map((photo: any[]) => ({
+            id: photo[0],
+            tags: photo[1],
+            memo: photo[2]
           }))
         })),
         tags: data.tg
