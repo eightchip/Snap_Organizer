@@ -4,12 +4,13 @@ import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import { usePostalTags } from '../../hooks/usePostalTags';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { loadImageBlob } from '../../utils/imageDB';
+import { LocationMap } from '../LocationMap';
 
 interface HomeScreenProps {
   items: PhotoItem[];
@@ -101,6 +102,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+
+  const [showMap, setShowMap] = useState(false);
 
   // 画像URLの読み込み
   useEffect(() => {
@@ -199,15 +202,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     });
 
     // Count tags from both items and groups
-    const counts = new Map<string, number>();
+    const counts = Object.fromEntries([]);
     items.forEach(item => {
       item.tags.forEach(tag => {
-        counts.set(tag, (counts.get(tag) || 0) + 1);
+        counts[tag] = (counts[tag] || 0) + 1;
       });
     });
     groups.forEach(group => {
       group.tags.forEach(tag => {
-        counts.set(tag, (counts.get(tag) || 0) + 1);
+        counts[tag] = (counts[tag] || 0) + 1;
       });
     });
 
@@ -336,6 +339,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
+                onClick={() => setShowMap(!showMap)}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="地図表示"
+              >
+                <Map className="h-5 w-5" />
+              </button>
+              <button
                 onClick={handleExport}
                 className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                 title="全体をエクスポート"
@@ -351,6 +361,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Map View */}
+          {showMap && (
+            <div className="mb-4 bg-white rounded-xl shadow-sm overflow-hidden">
+              <LocationMap
+                items={filteredItems}
+                groups={filteredGroups}
+                onItemClick={onItemClick}
+                onGroupClick={onGroupClick}
+              />
+            </div>
+          )}
 
           {/* Calendar Row */}
           <div className="flex items-center gap-2 pb-4">

@@ -1,12 +1,13 @@
 export interface Location {
   lat: number;
   lon: number;
+  address?: string;
 }
 
 export interface PhotoMetadata {
   dateTaken?: string;
   location?: Location;
-  source: 'single' | 'bulk';
+  source: 'camera' | 'bulk' | 'import';
   filename: string;
 }
 

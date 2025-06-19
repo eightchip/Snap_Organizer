@@ -48,6 +48,10 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
   const [useCloudOcr, setUseCloudOcr] = useState(false);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
   const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
+  const [isProcessingLock, setIsProcessingLock] = useState(false);
+  const processedFilesRef = useRef(new Set<string>());
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -128,68 +132,226 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
     });
   };
 
+  // 現在位置を取得
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('お使いのブラウザは位置情報の取得に対応していません');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude
+        });
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error('位置情報の取得に失敗しました:', error);
+        alert('位置情報の取得に失敗しました');
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  // イベントハンドラの設定
+  useEffect(() => {
+    const cameraInput = cameraInputRef.current;
+    const fileInput = fileInputRef.current;
+
+    const handleCamera = async (e: Event) => {
+      const event = { target: e.target } as React.ChangeEvent<HTMLInputElement>;
+      if (isProcessingLock) {
+        console.log('処理中のため、新しい撮影をスキップします');
+        return;
+      }
+      await handleCameraCapture(event);
+    };
+
+    const handleFile = async (e: Event) => {
+      const event = { target: e.target } as React.ChangeEvent<HTMLInputElement>;
+      if (isProcessingLock) {
+        console.log('処理中のため、新しいファイル選択をスキップします');
+        return;
+      }
+      await handleFileSelect(event);
+    };
+
+    if (cameraInput) {
+      cameraInput.onchange = handleCamera;
+    }
+
+    if (fileInput) {
+      fileInput.onchange = handleFile;
+    }
+
+    return () => {
+      if (cameraInput) {
+        cameraInput.onchange = null;
+        cameraInput.value = '';
+      }
+      if (fileInput) {
+        fileInput.onchange = null;
+        fileInput.value = '';
+      }
+      processedFilesRef.current.clear();
+    };
+  }, [currentLocation, isProcessingLock]);
+
+  // Handle camera capture
+  const handleCameraCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files?.length) return;
+    
+    const file = event.target.files[0];
+    const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+    
+    if (processedFilesRef.current.has(fileKey)) {
+      console.log('既に処理済みのファイルです:', fileKey);
+      return;
+    }
+
+    setIsProcessingLock(true);
+    setIsProcessing(true);
+    setSaveError(null);
+
+    try {
+      console.log('カメラ撮影開始:', fileKey);
+      processedFilesRef.current.add(fileKey);
+
+      // 位置情報を取得
+      let locationData: Location | null = currentLocation;
+      if (locationData === null) {
+        try {
+          locationData = await new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => reject(new Error('位置情報の取得がタイムアウトしました')), 10000);
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                clearTimeout(timeoutId);
+                resolve({
+                  lat: position.coords.latitude,
+                  lon: position.coords.longitude
+                });
+              },
+              (error) => {
+                clearTimeout(timeoutId);
+                console.warn('位置情報の取得に失敗しました:', error);
+                resolve(null);
+              },
+              { enableHighAccuracy: true, timeout: 10000 }
+            );
+          });
+        } catch (error) {
+          console.warn('位置情報の取得に失敗しました:', error);
+          locationData = null;
+        }
+      }
+
+      const id = generateId();
+      console.log('画像処理開始:', fileKey, id);
+
+      const resizedBase64 = await resizeImageWithOrientation(file);
+      const response = await fetch(resizedBase64);
+      const resizedBlob = await response.blob();
+      await saveImageBlob(id, resizedBlob);
+
+      const metadata: PhotoMetadata = {
+        filename: file.name,
+        source: 'camera',
+        dateTaken: await extractDateTaken(file),
+        location: locationData || await extractLocation(file),
+      };
+
+      const photo: PhotoItemWithRotation = {
+        id,
+        image: id,
+        ocrText: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata,
+        tags: [],
+        memo: '',
+        rotation: 0,
+      };
+
+      console.log('画像処理完了:', fileKey, id);
+
+      setPhotos(prev => [...prev, photo]);
+    } catch (error) {
+      console.error('カメラ撮影エラー:', error);
+      setSaveError(error instanceof Error ? error.message : '写真の処理に失敗しました');
+      processedFilesRef.current.delete(fileKey);
+    } finally {
+      setIsProcessing(false);
+      setIsProcessingLock(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
   // Handle file selection
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files?.length) return;
+    
+    setIsProcessingLock(true);
     setIsProcessing(true);
     setSaveError(null);
+
     try {
-      console.log('Starting file processing...', { fileCount: event.target.files.length });
       const newPhotos: PhotoItemWithRotation[] = [];
+
       for (const file of Array.from(event.target.files)) {
-        try {
-          // Generate unique ID
-          const id = generateId();
-          console.log(`Processing image: ${file.name}, size: ${file.size} bytes`);
-          // 向き補正＋リサイズ
-          const resizedBase64 = await resizeImageWithOrientation(file);
-          console.log('Image resized (with orientation) successfully');
-          // Base64からBlobに変換
-          const response = await fetch(resizedBase64);
-          if (!response.ok) throw new Error('Failed to create blob from resized image');
-          const resizedBlob = await response.blob();
-          console.log(`Resized blob created, size: ${resizedBlob.size} bytes`);
-          await saveImageBlob(id, resizedBlob);
-          console.log('Image blob saved successfully');
-          // Extract metadata
-          const metadata: PhotoMetadata = {
-            filename: file.name,
-            source: photos.length === 0 ? 'single' : 'bulk',
-            dateTaken: await extractDateTaken(file),
-            location: await extractLocation(file),
-          };
-          // Create photo item
-          const photo: PhotoItemWithRotation = {
-            id,
-            image: id,
-            ocrText: '',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            metadata,
-            tags: [],
-            memo: '',
-            rotation: 0,
-          };
-          newPhotos.push(photo);
-          console.log(`Photo item created successfully: ${id}`);
-        } catch (error) {
-          console.error('Image processing error:', error);
-          throw new Error(`画像「${file.name}」の処理に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+        const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+        if (processedFilesRef.current.has(fileKey)) {
+          console.log('既に処理済みのファイルです:', fileKey);
+          continue;
         }
+        processedFilesRef.current.add(fileKey);
+
+        const id = generateId();
+        console.log('画像処理開始:', fileKey, id);
+
+        const resizedBase64 = await resizeImageWithOrientation(file);
+        const response = await fetch(resizedBase64);
+        const resizedBlob = await response.blob();
+        await saveImageBlob(id, resizedBlob);
+
+        const metadata: PhotoMetadata = {
+          filename: file.name,
+          source: 'bulk',
+          dateTaken: await extractDateTaken(file),
+          location: await extractLocation(file),
+        };
+
+        const photo: PhotoItemWithRotation = {
+          id,
+          image: id,
+          ocrText: '',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata,
+          tags: [],
+          memo: '',
+          rotation: 0,
+        };
+
+        console.log('画像処理完了:', fileKey, id);
+        newPhotos.push(photo);
       }
-      if (newPhotos.length > 0) {
-        setPhotos(prev => [...prev, ...newPhotos]);
-        console.log(`${newPhotos.length} photos processed successfully`);
-      } else {
-        throw new Error('写真の処理に失敗しました');
-      }
+
+      setPhotos(prev => [...prev, ...newPhotos]);
     } catch (error) {
-      console.error('File processing error:', error);
+      console.error('ファイル処理エラー:', error);
       setSaveError(error instanceof Error ? error.message : '写真の処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
-      // Reset file input
-      event.target.value = '';
+      setIsProcessingLock(false);
+      if (event.target) {
+        event.target.value = '';
+      }
     }
   };
 
@@ -472,6 +634,23 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
           {!photos.length && (
             <div className="space-y-3">
               <button
+                onClick={() => {
+                  getCurrentLocation();
+                  cameraInputRef.current?.click();
+                }}
+                disabled={isProcessing || !wasmReady || isGettingLocation}
+                className={`w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed rounded-lg transition-colors
+                  ${isProcessing || !wasmReady || isGettingLocation
+                    ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
+                    : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}`}
+              >
+                <Camera className={`h-6 w-6 ${isProcessing || !wasmReady || isGettingLocation ? 'text-gray-300' : 'text-gray-400'}`} />
+                <span className={isProcessing || !wasmReady || isGettingLocation ? 'text-gray-400' : 'text-gray-600'}>
+                  {isGettingLocation ? '位置情報を取得中...' : isProcessing ? '処理中...' : 'カメラで撮影（位置情報付き）'}
+                </span>
+              </button>
+              
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isProcessing || !wasmReady}
                 className={`w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed rounded-lg transition-colors
@@ -482,20 +661,6 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
                 <Upload className={`h-6 w-6 ${isProcessing || !wasmReady ? 'text-gray-300' : 'text-gray-400'}`} />
                 <span className={isProcessing || !wasmReady ? 'text-gray-400' : 'text-gray-600'}>
                   {isProcessing ? '処理中...' : 'ギャラリーから選択（複数可）'}
-                </span>
-              </button>
-              
-              <button
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={isProcessing || !wasmReady}
-                className={`w-full flex items-center justify-center gap-3 py-4 border-2 border-dashed rounded-lg transition-colors
-                  ${isProcessing || !wasmReady 
-                    ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
-                    : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}`}
-              >
-                <Camera className={`h-6 w-6 ${isProcessing || !wasmReady ? 'text-gray-300' : 'text-gray-400'}`} />
-                <span className={isProcessing || !wasmReady ? 'text-gray-400' : 'text-gray-600'}>
-                  {isProcessing ? '処理中...' : 'カメラで撮影'}
                 </span>
               </button>
             </div>
@@ -516,7 +681,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
             type="file"
             accept="image/*"
             capture="environment"
-            onChange={handleFileSelect}
+            onChange={handleCameraCapture}
             className="hidden"
             disabled={isProcessing || !wasmReady}
           />
