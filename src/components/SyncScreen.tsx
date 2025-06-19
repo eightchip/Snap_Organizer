@@ -87,6 +87,34 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
     window.open(mailtoLink);
   };
 
+  // 各種メールサービスの送信
+  const sendToService = (service: 'gmail' | 'yahoo' | 'line' | 'outlook') => {
+    if (!emailData) return;
+
+    let url = '';
+    const subject = encodeURIComponent(emailData.subject);
+    const body = encodeURIComponent(emailData.body);
+
+    switch (service) {
+      case 'gmail':
+        url = `https://mail.google.com/mail/?view=cm&fs=1&to=&su=${subject}&body=${body}`;
+        break;
+      case 'yahoo':
+        url = `https://compose.mail.yahoo.com/?subject=${subject}&body=${body}`;
+        break;
+      case 'line':
+        // Lineは直接メール送信できないので、テキストとして送信
+        const lineText = `${emailData.subject}\n\n${emailData.body}`;
+        url = `https://line.me/R/msg/text/?${encodeURIComponent(lineText)}`;
+        break;
+      case 'outlook':
+        url = `https://outlook.live.com/mail/0/deeplink/compose?subject=${subject}&body=${body}`;
+        break;
+    }
+
+    window.open(url, '_blank');
+  };
+
   // ファイルインポート
   const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -318,7 +346,7 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
                 </div>
 
                 {emailData && (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <div className="text-sm">
                         <strong>件名:</strong> {emailData.subject}
@@ -329,13 +357,60 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
                       </div>
                     </div>
                     
-                    <button
-                      onClick={sendEmail}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                    >
-                      <Mail className="h-4 w-4" />
-                      メールアプリで開く
-                    </button>
+                    {/* メールサービス選択 */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-gray-900 text-center">送信先を選択</h4>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => sendToService('gmail')}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h.819L12 10.91l9.545-7.089h.819c.904 0 1.636.732 1.636 1.636z"/>
+                          </svg>
+                          Gmail
+                        </button>
+                        
+                        <button
+                          onClick={() => sendToService('yahoo')}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h.819L12 10.91l9.545-7.089h.819c.904 0 1.636.732 1.636 1.636z"/>
+                          </svg>
+                          Yahoo
+                        </button>
+                        
+                        <button
+                          onClick={() => sendToService('line')}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.365 9.863c.349 0 .63.285.631.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                          </svg>
+                          Line
+                        </button>
+                        
+                        <button
+                          onClick={() => sendToService('outlook')}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M7.88 3.39L6.6 1.86C6.45 1.69 6.24 1.58 6 1.58c-.24 0-.45.11-.6.28L3.88 3.39C3.73 3.56 3.62 3.77 3.62 4v16c0 .23.11.44.26.61l1.28 1.53c.15.17.36.28.6.28.24 0 .45-.11.6-.28l1.28-1.53c.15-.17.26-.38.26-.61V4c0-.23-.11-.44-.26-.61zM20.12 3.39l-1.28-1.53C18.69 1.69 18.48 1.58 18.24 1.58c-.24 0-.45.11-.6.28L16.36 3.39c-.15.17-.26.38-.26.61v16c0 .23.11.44.26.61l1.28 1.53c.15.17.36.28.6.28.24 0 .45-.11.6-.28l1.28-1.53c.15-.17.26-.38.26-.61V4c0-.23-.11-.44-.26-.61z"/>
+                          </svg>
+                          Outlook
+                        </button>
+                      </div>
+                      
+                      <button
+                        onClick={sendEmail}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                      >
+                        <Mail className="h-4 w-4" />
+                        デフォルトメールアプリ
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
