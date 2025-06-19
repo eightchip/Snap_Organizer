@@ -345,21 +345,50 @@ export class SyncManager {
     
     const subject = `[Snap Organizer] データバックアップ - ${deviceName} - ${timestamp}`;
     
+    // QRコードを生成
+    let qrCodeHtml = '';
+    try {
+      const qrCodes = await this.generateQRCode(syncData);
+      qrCodeHtml = qrCodes.map((qrCode, index) => `
+<div style="margin: 20px 0;">
+  <p style="color: #666;">QRコード ${qrCodes.length > 1 ? `(${index + 1}/${qrCodes.length})` : ''}</p>
+  <img src="${qrCode}" alt="同期用QRコード" style="width: 300px; height: 300px;">
+</div>`).join('');
+    } catch (error) {
+      console.error('QRコード生成エラー:', error);
+      qrCodeHtml = '<p style="color: red;">※ QRコードの生成に失敗しました</p>';
+    }
+    
     const body = `
-Snap Organizer データバックアップ
+<html>
+<body style="font-family: sans-serif;">
+  <h1 style="color: #333;">Snap Organizer データバックアップ</h1>
 
-デバイス: ${deviceName}
-日時: ${timestamp}
-アイテム数: ${syncData.data.items.length}
-グループ数: ${syncData.data.groups.length}
-タグ数: ${syncData.data.tags.length}
+  <div style="margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+    <p>デバイス: ${deviceName} - ${timestamp}</p>
+    <p>アイテム数: ${syncData.data.items.length}</p>
+    <p>グループ数: ${syncData.data.groups.length}</p>
+    <p>タグ数: ${syncData.data.tags.length}</p>
+  </div>
 
-このメールには、アプリのデータが添付されています。
-新しいデバイスでQRコードを読み取るか、添付ファイルをインポートしてください。
+  <div style="margin: 20px 0;">
+    <p>このメールには、アプリのデータが添付されています。</p>
+    <p>新しいデバイスで以下のいずれかの方法でデータを復元できます：</p>
+    <ul>
+      <li>下記のQRコードを読み取る</li>
+      <li>添付ファイルをインポートする</li>
+    </ul>
+  </div>
 
----
-Snap Organizer
-`;
+  ${qrCodeHtml}
+
+  <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+  <p style="color: #666;">
+    Snap Organizer<br>
+    From: eightchip@yahoo.co.jp
+  </p>
+</body>
+</html>`;
 
     // データをファイルとして添付
     const dataBlob = new Blob([JSON.stringify(syncData, null, 2)], {
