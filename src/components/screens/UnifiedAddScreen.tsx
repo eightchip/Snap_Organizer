@@ -230,23 +230,35 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
             navigator.geolocation.getCurrentPosition(
               (position) => {
                 clearTimeout(timeoutId);
-                resolve({
+                const location = {
                   lat: position.coords.latitude,
                   lon: position.coords.longitude
+                };
+                console.log('カメラ撮影: 位置情報を取得しました', {
+                  location,
+                  accuracy: position.coords.accuracy,
+                  timestamp: new Date(position.timestamp).toISOString()
                 });
+                resolve(location);
               },
               (error) => {
                 clearTimeout(timeoutId);
                 console.warn('位置情報の取得に失敗しました:', error);
                 resolve(null);
               },
-              { enableHighAccuracy: true, timeout: 10000 }
+              { 
+                enableHighAccuracy: true, 
+                timeout: 10000,
+                maximumAge: 0 
+              }
             );
           });
         } catch (error) {
           console.warn('位置情報の取得に失敗しました:', error);
           locationData = null;
         }
+      } else {
+        console.log('カメラ撮影: 既存の位置情報を使用します', locationData);
       }
 
       const id = generateId();
@@ -257,12 +269,25 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       const resizedBlob = await response.blob();
       await saveImageBlob(id, resizedBlob);
 
+      // EXIFから位置情報を取得
+      const exifLocation = await extractLocation(file);
+      console.log('カメラ撮影: EXIFの位置情報', {
+        fileKey,
+        exifLocation,
+        deviceLocation: locationData
+      });
+
       const metadata: PhotoMetadata = {
         filename: file.name,
         source: 'camera',
         dateTaken: await extractDateTaken(file),
-        location: locationData || await extractLocation(file),
+        location: locationData || exifLocation,
       };
+
+      console.log('カメラ撮影: メタデータを設定', {
+        fileKey,
+        metadata
+      });
 
       const photo: PhotoItemWithRotation = {
         id,

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { PostalItemGroup, PhotoItem } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareGroup } from '../../utils/share';
+import { LocationMap } from '../LocationMap';
 
 interface DetailGroupScreenProps {
   group: PostalItemGroup;
@@ -511,6 +512,57 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
           <p className="text-gray-600">作成日時: {formatDate(group.createdAt)}</p>
           {group.updatedAt.getTime() !== group.createdAt.getTime() && (
             <p className="text-gray-600 mt-1">最終更新: {formatDate(group.updatedAt)}</p>
+          )}
+        </div>
+
+        {/* Location Info */}
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">位置情報</h2>
+          {group.photos.some(photo => photo.metadata?.location) ? (
+            <div className="space-y-4">
+              {group.photos.map((photo, index) => {
+                const location = photo.metadata?.location;
+                if (!location) return null;
+                
+                return (
+                  <div key={photo.id} className="flex items-start gap-3">
+                    <MapPin className="h-5 w-5 text-blue-500 mt-1 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        写真 {index + 1}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        緯度: {location.lat.toFixed(6)}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        経度: {location.lon.toFixed(6)}
+                      </div>
+                      <a
+                        href={`https://www.google.com/maps?q=${location.lat},${location.lon}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-500 hover:text-blue-600 inline-flex items-center gap-1 mt-1"
+                      >
+                        Google Mapsで表示
+                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                          <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="mt-4">
+                <LocationMap
+                  items={[]}
+                  groups={[group]}
+                  className="h-48 rounded-lg overflow-hidden"
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500">位置情報なし</p>
           )}
         </div>
       </div>
