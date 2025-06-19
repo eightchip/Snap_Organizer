@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:wasm && vite build",
+    "build": "vite build",
     "build:wasm": "cd your-wasm-pkg && wasm-pack build --target web",
+    "build:full": "npm run build:wasm && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "postinstall": "patch-package && node -e \"try { require('fs').chmodSync('node_modules/.bin/vite', '755') } catch (e) { }\""
