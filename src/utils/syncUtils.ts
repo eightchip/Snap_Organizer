@@ -98,41 +98,42 @@ export class SyncManager {
   }
 
   // データの準備（高度な圧縮）
-  async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<CompressedSyncData> {
+  async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<SyncData> {
     // さらにデータを最小化
     const minimalData = {
-      i: items.map(item => ({
-        i: item.id,
-        t: item.tags || [],
-        m: item.memo || '',
-        c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
-        u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
+      items: items.map(item => ({
+        id: item.id,
+        tags: item.tags || [],
+        memo: item.memo || '',
+        createdAt: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
+        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
       })),
-      g: groups.map(group => ({
-        i: group.id,
-        t: group.title || '',
-        g: group.tags || [],
-        m: group.memo || '',
-        c: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
-        u: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
-        p: group.photos.map(photo => ({
-          i: photo.id,
-          t: photo.tags || [],
-          m: photo.memo || ''
+      groups: groups.map(group => ({
+        id: group.id,
+        title: group.title || '',
+        tags: group.tags || [],
+        memo: group.memo || '',
+        createdAt: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
+        updatedAt: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
+        photos: group.photos.map(photo => ({
+          id: photo.id,
+          tags: photo.tags || [],
+          memo: photo.memo || ''
         }))
       })),
-      t: tags
+      tags: tags
     };
 
     // チェックサムを計算
     const checksum = await this.calculateChecksum(JSON.stringify(minimalData));
 
+    // SyncData形式で返す
     return {
-      v: '1.0',
-      ts: Date.now(),
-      did: this.deviceId,
-      d: minimalData,
-      c: checksum
+      version: '1.0',
+      timestamp: Date.now(),
+      deviceId: this.deviceId,
+      data: minimalData,
+      checksum: checksum
     };
   }
 
@@ -145,7 +146,7 @@ export class SyncManager {
       }
 
       // 2. 必須フィールドの存在チェック
-      const requiredFields = ['version', 'timestamp', 'deviceId', 'data'];
+      const requiredFields = ['version', 'timestamp', 'deviceId', 'data'] as const;
       for (const field of requiredFields) {
         if (!syncData[field]) {
           throw new Error(`必須フィールド '${field}' が不足しています`);
@@ -163,7 +164,7 @@ export class SyncManager {
       }
 
       // 5. データを短縮名で再構成
-      const minimalData = {
+      const minimalData: CompressedSyncData = {
         v: syncData.version,
         ts: syncData.timestamp,
         did: syncData.deviceId,
@@ -194,7 +195,7 @@ export class SyncManager {
               i: group.id,
               t: group.title || '',
               m: group.memo || '',
-              tg: Array.isArray(group.tags) ? group.tags : [],
+              g: Array.isArray(group.tags) ? group.tags : [],
               c: this.normalizeTimestamp(group.createdAt),
               u: this.normalizeTimestamp(group.updatedAt),
               p: Array.isArray(group.photos) ? group.photos.map((photo, photoIndex) => {
@@ -207,14 +208,14 @@ export class SyncManager {
                 return {
                   i: photo.id,
                   t: Array.isArray(photo.tags) ? photo.tags : [],
-                  m: photo.memo || '',
-                  c: this.normalizeTimestamp(photo.createdAt),
-                  u: this.normalizeTimestamp(photo.updatedAt)
+                  m: photo.memo || ''
                 };
               }) : []
             };
-          })
-        }
+          }),
+          t: syncData.data.tags
+        },
+        c: syncData.checksum
       };
 
       // 6. JSONに変換して返す
@@ -297,7 +298,7 @@ export class SyncManager {
       }
 
       // 4. 各チャンクをQRコードに変換
-      const qrOptions: QRCode.QRCodeToDataURLOptions = {
+      const qrOptions = {
         errorCorrectionLevel: 'M' as QRCode.QRCodeErrorCorrectionLevel,
         margin: 1,
         width: 300,
@@ -307,17 +308,19 @@ export class SyncManager {
         }
       };
 
-      const qrPromises = chunks.map(async (chunk) => {
+      const qrPromises = chunks.map(async (chunk, index) => {
         try {
           const chunkStr = JSON.stringify(chunk);
           return await QRCode.toDataURL(chunkStr, qrOptions);
         } catch (error) {
-          console.error(`QRコード生成エラー (チャンク ${chunk.i + 1}/${chunk.n}):`, error);
-          throw new Error(`QRコード生成に失敗しました (チャンク ${chunk.i + 1}/${chunk.n}): ${error.message}`);
+          console.error(`QRコード生成エラー (チャンク ${index + 1}/${totalChunks}):`, error);
+          throw new Error(`QRコード生成に失敗しました (チャンク ${index + 1}/${totalChunks}): ${error.message}`);
         }
       });
 
-      return await Promise.all(qrPromises);
+      const results = await Promise.all(qrPromises);
+      console.log(`QRコード生成完了: ${results.length}個のQRコードを生成しました`);
+      return results;
     } catch (error) {
       console.error('QRコード生成エラー:', error);
       throw new Error(`QRコード生成に失敗しました: ${error.message}`);
