@@ -7,6 +7,7 @@ import { ItemCard } from '../ItemCard';
 import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import { usePostalTags } from '../../hooks/usePostalTags';
+import { MAX_TAGS } from '../../constants/tags';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { loadImageBlob } from '../../utils/imageDB';
@@ -29,29 +30,66 @@ interface HomeScreenProps {
 }
 
 const COLOR_PALETTE = [
-  { name: '仕事', color: '#3B82F6' },
-  { name: '趣味', color: '#22C55E' },
-  { name: '旅行', color: '#A78BFA' },
-  { name: '赤', color: '#FF0000' },
-  { name: '青', color: '#0000FF' },
-  { name: '緑', color: '#008000' },
-  { name: '黄', color: '#FFFF00' },
-  { name: '紫', color: '#800080' },
-  { name: '橙', color: '#FFA500' },
-  { name: '茶', color: '#A52A2A' },
-  { name: 'ピンク', color: '#FFC0CB' },
-  { name: 'シアン', color: '#00FFFF' },
-  { name: 'マゼンタ', color: '#FF00FF' },
-  { name: 'ライム', color: '#00FF00' },
-  { name: 'ネイビー', color: '#000080' },
-  { name: 'オリーブ', color: '#808000' },
-  { name: 'テール', color: '#008080' },
-  { name: 'マルーン', color: '#800000' },
-  { name: 'グレー', color: '#808080' },
-  { name: '白', color: '#FFFFFF' },
+  // 書類・文書関連
+  { name: '請求書', color: '#3B82F6' },  // 青
+  { name: '領収書', color: '#22C55E' },  // 緑
+  { name: '契約書', color: '#A78BFA' },  // 紫
+  { name: '申請書', color: '#F59E0B' },  // オレンジ
+  { name: '通知', color: '#EC4899' },    // ピンク
+
+  // 生活関連
+  { name: '病院', color: '#EF4444' },    // 赤
+  { name: '学校', color: '#06B6D4' },    // シアン
+  { name: '住所', color: '#8B5CF6' },    // バイオレット
+  { name: '保険', color: '#10B981' },    // エメラルド
+  { name: 'メモ', color: '#6366F1' },    // インディゴ
+
+  // 追加のカラーパレット（新規タグ用）
+  { name: '赤', color: '#DC2626' },
+  { name: '青', color: '#2563EB' },
+  { name: '緑', color: '#059669' },
+  { name: '黄', color: '#D97706' },
+  { name: '紫', color: '#7C3AED' },
+  { name: '橙', color: '#EA580C' },
+  { name: '茶', color: '#92400E' },
+  { name: 'ピンク', color: '#DB2777' },
+  { name: 'シアン', color: '#0891B2' },
+  { name: 'マゼンタ', color: '#BE185D' },
+  { name: 'ライム', color: '#65A30D' },
+  { name: 'ネイビー', color: '#1E40AF' },
+  { name: 'オリーブ', color: '#4D7C0F' },
+  { name: 'テール', color: '#0F766E' },
+  { name: 'マルーン', color: '#9F1239' },
+  { name: 'グレー', color: '#4B5563' },
+  { name: '白', color: '#F9FAFB' },
 ];
 
-const DEFAULT_TAGS = COLOR_PALETTE.slice(0, 3);
+const DEFAULT_TAGS = COLOR_PALETTE.slice(0, 10); // 最初の10個を初期タグとして使用
+
+// usePostalTagsフックを拡張
+const usePostalTagsWithLimit = () => {
+  const postalTags = usePostalTags();
+  
+  // 元のhandleAddTagを上書き
+  const handleAddTagWithLimit = () => {
+    if (!postalTags.newTagName.trim()) return;
+    if (postalTags.tags.length >= MAX_TAGS) {
+      alert(`タグの最大数（${MAX_TAGS}個）に達しました。\n不要なタグを削除してから追加してください。`);
+      return;
+    }
+    const newTag = { name: postalTags.newTagName.trim(), color: postalTags.newTagColor };
+    const updated = [...postalTags.tags, newTag];
+    localStorage.setItem('postal_tags', JSON.stringify(updated));
+    postalTags.setNewTagName('');
+    postalTags.setNewTagColor('#3B82F6');
+    postalTags.setShowAddTag(false);
+  };
+
+  return {
+    ...postalTags,
+    handleAddTag: handleAddTagWithLimit
+  };
+};
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   items,
@@ -86,7 +124,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     handleEditTag,
     handleCancelEdit,
     handleRemoveTag
-  } = usePostalTags();
+  } = usePostalTagsWithLimit();
 
   // 日付範囲検索用state
   const [startDate, setStartDate] = useState('');

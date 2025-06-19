@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { loadAllData, saveAllData } from '../utils/storage';
+import { DEFAULT_TAGS } from '../constants/tags';
 
 interface Tag {
   name: string;
@@ -13,18 +13,14 @@ const COLOR_PALETTE = [
 ];
 
 export const usePostalTags = () => {
-  // タグ管理（localStorage永続化）
-  const [tags, setTags] = useState<Tag[]>(() => {
+  const [tags, setTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : COLOR_PALETTE;
+    return saved ? JSON.parse(saved) : DEFAULT_TAGS;
   });
 
-  // 新規タグ追加用state
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#3B82F6');
-
-  // タグ編集用state
   const [tagEditIdx, setTagEditIdx] = useState<number|null>(null);
   const [tagEditName, setTagEditName] = useState('');
   const [tagEditColor, setTagEditColor] = useState('#3B82F6');
@@ -49,26 +45,13 @@ export const usePostalTags = () => {
   };
 
   // タグ編集保存
-  const handleEditTag = async () => {
+  const handleEditTag = () => {
     if (tagEditIdx === null || !tagEditName.trim()) return;
-    const oldName = tags[tagEditIdx].name;
-    const newName = tagEditName.trim();
-    const updated = tags.map((t, i) => i === tagEditIdx ? { name: newName, color: tagEditColor } : t);
+    const updated = tags.map((t, i) => 
+      i === tagEditIdx ? { name: tagEditName.trim(), color: tagEditColor } : t
+    );
     setTags(updated);
     localStorage.setItem('postal_tags', JSON.stringify(updated));
-
-    // 既存のアイテムとグループのタグも更新
-    const data = loadAllData();
-    data.items = data.items.map(item => ({
-      ...item,
-      tags: item.tags.map(t => t === oldName ? newName : t)
-    }));
-    data.groups = data.groups.map(group => ({
-      ...group,
-      tags: group.tags.map(t => t === oldName ? newName : t)
-    }));
-    await saveAllData(data);
-
     setTagEditIdx(null);
     setTagEditName('');
     setTagEditColor('#3B82F6');
@@ -82,24 +65,11 @@ export const usePostalTags = () => {
   };
 
   // タグ削除
-  const handleRemoveTag = async (idx: number) => {
+  const handleRemoveTag = (idx: number) => {
     if (!window.confirm('このタグを削除しますか？')) return;
-    const delName = tags[idx].name;
     const updated = tags.filter((_, i) => i !== idx);
     setTags(updated);
     localStorage.setItem('postal_tags', JSON.stringify(updated));
-
-    // 既存のアイテムとグループからタグを削除
-    const data = loadAllData();
-    data.items = data.items.map(item => ({
-      ...item,
-      tags: item.tags.filter(t => t !== delName)
-    }));
-    data.groups = data.groups.map(group => ({
-      ...group,
-      tags: group.tags.filter(t => t !== delName)
-    }));
-    await saveAllData(data);
   };
 
   return {
@@ -111,7 +81,6 @@ export const usePostalTags = () => {
     newTagColor,
     setNewTagColor,
     tagEditIdx,
-    setTagEditIdx,
     tagEditName,
     setTagEditName,
     tagEditColor,
