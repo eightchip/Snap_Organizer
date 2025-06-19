@@ -139,20 +139,24 @@ export class SyncManager {
   // 高度なデータ圧縮
   private async compressDataAdvanced(syncData: SyncData): Promise<string> {
     try {
+      if (!syncData || !syncData.data) {
+        throw new Error('同期データが不正です');
+      }
+
       // 1. データを短縮名で再構成
       const minimalData = {
         v: syncData.version,
         ts: syncData.timestamp,
         did: syncData.deviceId,
         d: {
-          i: syncData.data.items.map(item => ({
+          i: (syncData.data.items || []).map(item => ({
             i: item.id,
             t: item.tags,
             m: item.memo,
             c: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
             u: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
           })),
-          g: syncData.data.groups.map(group => ({
+          g: (syncData.data.groups || []).map(group => ({
             i: group.id,
             t: group.title,
             g: group.tags,
@@ -174,8 +178,8 @@ export class SyncManager {
       // 3. Base64エンコード（1回のみ）
       return btoa(minified).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     } catch (error) {
-      console.error('圧縮エラー:', error);
-      throw error;
+      console.error('データ圧縮エラー:', error);
+      throw new Error('データの圧縮に失敗しました');
     }
   }
 
