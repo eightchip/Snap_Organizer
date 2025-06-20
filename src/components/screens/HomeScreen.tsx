@@ -3,9 +3,10 @@ import { PhotoItem, PostalItemGroup } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
-import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image, RefreshCw } from 'lucide-react';
+import { Plus, Package, Edit2, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image, RefreshCw, Search } from 'lucide-react';
 import { usePostalItems } from '../../hooks/usePostalItems';
 import { usePostalTags } from '../../hooks/usePostalTags';
+import { useSearch, SearchQuery, SearchResult } from '../../hooks/useSearch';
 import { MAX_TAGS } from '../../constants/tags';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
@@ -157,6 +158,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [showShareModal, setShowShareModal] = useState(false);
   const syncManager = useMemo(() => new SyncManager(), []);
 
+  // 新しい検索フックを使用
+  const {
+    isInitialized,
+    isSearching,
+    searchResults,
+    searchHistory,
+    error: searchError,
+    search: advancedSearch,
+    addItemToIndex,
+    addGroupToIndex,
+    updateItemInIndex,
+    deleteItemFromIndex,
+  } = useSearch();
+
+  // 検索結果の状態管理
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [currentSearchMode, setCurrentSearchMode] = useState<'basic' | 'advanced'>('basic');
+
   // 画像URLの読み込み
   useEffect(() => {
     const loadImages = async () => {
@@ -228,64 +247,152 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   }, [isSelectionMode]);
 
-  // Combine items and groups into a single list for display
-  const { filteredItems, filteredGroups, tagCounts } = useMemo(() => {
-    // Ensure items and groups are arrays
-    const itemsArray = Array.isArray(items) ? items : [];
-    const groupsArray = Array.isArray(groups) ? groups : [];
+  // 高度な検索を実行
+  const handleAdvancedSearch = async (query: SearchQuery) => {
+    setCurrentSearchMode('advanced');
+    setShowSearchResults(true);
+    await advancedSearch(query);
+  };
 
-    // Filter items
-    const filteredItems = itemsArray.filter(item => {
-      const matchesSearch = item.ocrText?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.memo?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => item.tags?.includes(tag));
-      
-      // 日付フィルタリング
-      const itemDate = new Date(item.createdAt);
-      const matchesDateRange = (!startDate || itemDate >= new Date(startDate)) &&
-        (!endDate || itemDate <= new Date(endDate + 'T23:59:59'));
-      
-      return matchesSearch && matchesTags && matchesDateRange;
-    });
+  // 基本的な検索を実行
+  const handleBasicSearch = async (query: string) => {
+    if (!query.trim()) {
+      setShowSearchResults(false);
+      setCurrentSearchMode('basic');
+      return;
+    }
 
-    // Filter groups
-    const filteredGroups = groupsArray.filter(group => {
-      const matchesSearch = group.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        group.memo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        group.photos?.some(photo => photo.ocrText?.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => group.tags?.includes(tag));
-      
-      // 日付フィルタリング
-      const groupDate = new Date(group.createdAt);
-      const matchesDateRange = (!startDate || groupDate >= new Date(startDate)) &&
-        (!endDate || groupDate <= new Date(endDate + 'T23:59:59'));
-      
-      return matchesSearch && matchesTags && matchesDateRange;
-    });
-
-    // Count tags from both items and groups
-    const counts: Record<string, number> = {};
-    itemsArray.forEach(item => {
-      if (Array.isArray(item.tags)) {
-        item.tags.forEach(tag => {
-          counts[tag] = (counts[tag] || 0) + 1;
-        });
-      }
-    });
-    groupsArray.forEach(group => {
-      if (Array.isArray(group.tags)) {
-        group.tags.forEach(tag => {
-          counts[tag] = (counts[tag] || 0) + 1;
-        });
-      }
-    });
-
-    return {
-      filteredItems,
-      filteredGroups,
-      tagCounts: counts
+    setCurrentSearchMode('basic');
+    setShowSearchResults(true);
+    
+    // 基本的な検索クエリを作成
+    const searchQuery: SearchQuery = {
+      query: query.trim(),
+      fields: ['ocr_text', 'memo', 'tags', 'location_name'],
+      limit: 50,
     };
-  }, [items, groups, searchQuery, selectedTags, startDate, endDate]);
+    
+    await advancedSearch(searchQuery);
+  };
+
+  // 検索結果からアイテムを取得
+  const getSearchResultItems = useMemo(() => {
+    if (!showSearchResults || !searchResults.length) {
+      return { items: [], groups: [] };
+    }
+
+    const resultItems: PhotoItem[] = [];
+    const resultGroups: PostalItemGroup[] = [];
+
+    // 検索結果のIDからアイテムとグループを取得
+    for (const result of searchResults) {
+      // アイテムから検索
+      const item = items.find(item => item.id === result.id);
+      if (item) {
+        resultItems.push(item);
+        continue;
+      }
+
+      // グループから検索
+      const group = groups.find(group => group.id === result.id);
+      if (group) {
+        resultGroups.push(group);
+        continue;
+      }
+
+      // グループ内の写真から検索
+      for (const group of groups) {
+        const photo = group.photos.find(photo => photo.id === result.id);
+        if (photo) {
+          resultItems.push(photo);
+          break;
+        }
+      }
+    }
+
+    return { items: resultItems, groups: resultGroups };
+  }, [searchResults, items, groups, showSearchResults]);
+
+  // アイテムとグループを検索インデックスに追加
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const updateSearchIndex = async () => {
+      // アイテムをインデックスに追加
+      for (const item of items) {
+        await addItemToIndex(item);
+      }
+
+      // グループをインデックスに追加
+      for (const group of groups) {
+        await addGroupToIndex(group);
+      }
+    };
+
+    updateSearchIndex();
+  }, [isInitialized, items, groups, addItemToIndex, addGroupToIndex]);
+
+  // 検索クエリが変更されたときの処理
+  useEffect(() => {
+    if (searchQuery) {
+      handleBasicSearch(searchQuery);
+    } else {
+      setShowSearchResults(false);
+    }
+  }, [searchQuery]);
+
+  // フィルタリングされたアイテムとグループ
+  const filteredItems = useMemo(() => {
+    let filtered = showSearchResults ? getSearchResultItems.items : items;
+
+    // 日付フィルター
+    if (startDate || endDate) {
+      filtered = filtered.filter(item => {
+        const itemDate = new Date(item.createdAt);
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        
+        if (start && itemDate < start) return false;
+        if (end && itemDate > end) return false;
+        return true;
+      });
+    }
+
+    // タグフィルター
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(item =>
+        selectedTags.some(tag => item.tags.includes(tag))
+      );
+    }
+
+    return filtered;
+  }, [showSearchResults, getSearchResultItems.items, items, startDate, endDate, selectedTags]);
+
+  const filteredGroups = useMemo(() => {
+    let filtered = showSearchResults ? getSearchResultItems.groups : groups;
+
+    // 日付フィルター
+    if (startDate || endDate) {
+      filtered = filtered.filter(group => {
+        const groupDate = new Date(group.createdAt);
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        
+        if (start && groupDate < start) return false;
+        if (end && groupDate > end) return false;
+        return true;
+      });
+    }
+
+    // タグフィルター
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(group =>
+        selectedTags.some(tag => group.tags.includes(tag))
+      );
+    }
+
+    return filtered;
+  }, [showSearchResults, getSearchResultItems.groups, groups, startDate, endDate, selectedTags]);
 
   const handleExportClick = () => {
     setShowShareModal(true);
@@ -452,7 +559,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <SearchBar
                 value={searchQuery}
                 onChange={onSearchChange}
+                onAdvancedSearch={handleAdvancedSearch}
                 placeholder="テキストやタグで検索..."
+                showAdvancedSearch={true}
+                isSearching={isSearching}
               />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -508,6 +618,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </button>
             )}
           </div>
+
+          {/* 検索結果の表示 */}
+          {showSearchResults && (
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-900">
+                    検索結果 ({searchResults.length}件)
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSearchResults(false);
+                    onSearchChange('');
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  クリア
+                </button>
+              </div>
+              {searchError && (
+                <p className="text-xs text-red-600 mb-2">{searchError}</p>
+              )}
+              <p className="text-xs text-blue-700">
+                {currentSearchMode === 'advanced' ? '高度な検索' : '基本検索'}で「{searchQuery}」を検索
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
