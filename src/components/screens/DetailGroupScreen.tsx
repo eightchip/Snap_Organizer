@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { PostalItemGroup, PhotoItem } from '../../types';
+import { PostalItemGroup, PhotoItem, Location } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin, GripVertical } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin, GripVertical, Navigation } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
 import { resizeImage } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareGroup } from '../../utils/share';
 import { LocationMap } from '../LocationMap';
+import LocationEditorModal from '../LocationEditorModal';
+import NavigationModal from '../NavigationModal';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 interface DetailGroupScreenProps {
@@ -33,7 +35,10 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const [editedMemo, setEditedMemo] = useState(group.memo);
   const [editedTags, setEditedTags] = useState<string[]>(group.tags);
   const [editedPhotos, setEditedPhotos] = useState<PhotoItemWithRotation[]>(group.photos);
+  const [editedLocation, setEditedLocation] = useState<Location | null>(group.metadata?.location || null);
   const [isSharing, setIsSharing] = useState(false);
+  const [isLocationEditorOpen, setIsLocationEditorOpen] = useState(false);
+  const [isNavigationModalOpen, setIsNavigationModalOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
@@ -165,12 +170,19 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
       const { rotation, ...photoWithoutRotation } = photo;
       processedPhotos.push(photoWithoutRotation);
     }
+
+    const updatedMetadata = {
+      ...group.metadata,
+      location: editedLocation || undefined,
+    };
+
     onUpdate({
       title: editedTitle,
       memo: editedMemo,
       tags: editedTags,
       photos: processedPhotos,
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      metadata: updatedMetadata,
     });
     setIsEditing(false);
   };
@@ -180,6 +192,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     setEditedMemo(group.memo);
     setEditedTags(group.tags);
     setEditedPhotos(group.photos);
+    setEditedLocation(group.metadata?.location || null);
     setIsEditing(false);
   };
 
@@ -233,15 +246,20 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      const success = await shareGroup(group);
-      if (!success) {
-        alert('共有に失敗しました。');
-      }
-    } catch (error) {
-      console.error('共有エラー:', error);
-      alert('共有中にエラーが発生しました。');
+      await shareGroup(group);
     } finally {
       setIsSharing(false);
+    }
+  };
+
+  const handleLocationSave = (location: Location) => {
+    setEditedLocation(location);
+    setIsLocationEditorOpen(false);
+  };
+
+  const handleNavigation = () => {
+    if (editedLocation) {
+      setIsNavigationModalOpen(true);
     }
   };
 
@@ -573,57 +591,74 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
           )}
         </div>
 
-        {/* Location Info */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">位置情報</h2>
-          {group.photos.some(photo => photo.metadata?.location) ? (
-            <div className="space-y-4">
-              {group.photos.map((photo, index) => {
-                const location = photo.metadata?.location;
-                if (!location) return null;
-                
-                return (
-                  <div key={photo.id} className="flex items-start gap-3">
-                    <MapPin className="h-5 w-5 text-blue-500 mt-1 flex-shrink-0" />
+        {/* Location Section */}
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+            <MapPin className="h-5 w-5 mr-2 text-gray-500" />
+            位置情報
+          </h3>
+          {isEditing ? (
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        写真 {index + 1}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        緯度: {location.lat.toFixed(6)}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        経度: {location.lon.toFixed(6)}
-                      </div>
-                      <a
-                        href={`https://www.google.com/maps?q=${location.lat},${location.lon}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-500 hover:text-blue-600 inline-flex items-center gap-1 mt-1"
-                      >
-                        Google Mapsで表示
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                          <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
-                        </svg>
-                      </a>
-                    </div>
+              {editedLocation ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-700">{editedLocation.name || `緯度: ${editedLocation.lat.toFixed(4)}, 経度: ${editedLocation.lon.toFixed(4)}`}</p>
+                  <div className="h-40 rounded-md overflow-hidden">
+                    <LocationMap items={[{ 
+                      id: 'temp-location-item', 
+                      image: '', 
+                      ocrText: '', 
+                      memo: '', 
+                      tags: [], 
+                      createdAt: new Date(), 
+                      updatedAt: new Date(), 
+                      metadata: { location: editedLocation, source: 'import', filename: '' } 
+                    }]} groups={[]} />
                   </div>
-                );
-              })}
-              <div className="mt-4">
-                <LocationMap
-                  items={[]}
-                  groups={[group]}
-                  className="h-48 rounded-lg overflow-hidden"
-                />
+                  <button onClick={() => setIsLocationEditorOpen(true)} className="text-sm text-blue-600 hover:underline">
+                    位置情報を変更
+                  </button>
               </div>
+              ) : (
+                <button onClick={() => setIsLocationEditorOpen(true)} className="w-full text-center py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                  位置情報を追加
+                </button>
+              )}
             </div>
           ) : (
-            <p className="text-gray-500">位置情報なし</p>
+            <div>
+              {group.metadata?.location ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-700">{group.metadata.location.name || `緯度: ${group.metadata.location.lat.toFixed(4)}, 経度: ${group.metadata.location.lon.toFixed(4)}`}</p>
+                  <div className="h-40 rounded-md overflow-hidden">
+                    <LocationMap items={[]} groups={[group]} />
+                  </div>
+                   <button onClick={handleNavigation} className="mt-2 w-full text-center py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 flex items-center justify-center gap-2">
+                    <Navigation className="h-4 w-4" />
+                    ここへ行く
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">このグループに位置情報はありません。</p>
+              )}
+            </div>
           )}
         </div>
       </div>
+
+      {isLocationEditorOpen && (
+        <LocationEditorModal
+          initialLocation={editedLocation}
+          onClose={() => setIsLocationEditorOpen(false)}
+          onSave={handleLocationSave}
+        />
+      )}
+
+      {isNavigationModalOpen && editedLocation && (
+        <NavigationModal
+          onClose={() => setIsNavigationModalOpen(false)}
+          destination={editedLocation}
+        />
+      )}
     </div>
   );
 }; 

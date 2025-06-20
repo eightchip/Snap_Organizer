@@ -32,6 +32,9 @@ export interface PostalItemGroup {
   memo: string;
   createdAt: Date;
   updatedAt: Date;
+  metadata?: {
+    location?: Location;
+  };
 }
 
 export interface Tag {
