@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { PhotoItem } from '../../types';
+import { PhotoItem, Location } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2, RotateCw, RotateCcw, MapPin } from 'lucide-react';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareItem } from '../../utils/share';
 import { LocationMap } from '../LocationMap';
+import LocationEditorModal from '../LocationEditorModal';
 
 interface DetailScreenProps {
   item: PhotoItem;
@@ -44,8 +45,10 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   const [editedOcrText, setEditedOcrText] = useState(item.ocrText);
   const [editedMemo, setEditedMemo] = useState(item.memo);
   const [editedTags, setEditedTags] = useState<string[]>(item.tags);
+  const [editedLocation, setEditedLocation] = useState<Location | null>(item.metadata?.location || null);
   const [isListening, setIsListening] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [isLocationEditorOpen, setIsLocationEditorOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
@@ -143,10 +146,18 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
         await loadImageBlob(item.image).then(() => saveImageBlob(item.id, rotatedBlob));
       }
     }
+    
+    // メタデータを更新
+    const updatedMetadata = {
+      ...item.metadata,
+      location: editedLocation || undefined,
+    };
+    
     onUpdate({
       ocrText: editedOcrText,
       memo: editedMemo,
-      tags: editedTags
+      tags: editedTags,
+      metadata: updatedMetadata,
     });
     setIsEditing(false);
   };
@@ -155,6 +166,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     setEditedOcrText(item.ocrText);
     setEditedMemo(item.memo);
     setEditedTags(item.tags);
+    setEditedLocation(item.metadata?.location || null);
     setIsEditing(false);
   };
 
@@ -211,235 +223,229 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     }
   };
 
+  const handleLocationSave = (location: Location) => {
+    setEditedLocation(location);
+    setIsLocationEditorOpen(false);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-md mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onBack}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <h1 className="text-xl font-bold text-gray-900 flex-1">
-              アイテム詳細
-            </h1>
-            <div className="flex items-center gap-2">
-              {isEditing ? (
-                <>
-                  <button
-                    onClick={handleCancel}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <X className="h-5 w-5 text-gray-500" />
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                  >
-                    <Check className="h-5 w-5 text-green-600" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleShare}
-                    disabled={isSharing}
-                    className={`p-2 rounded-lg transition-colors ${
-                      isSharing ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-blue-100'
-                    }`}
-                  >
-                    <Share2 className={`h-5 w-5 ${isSharing ? 'text-gray-400' : 'text-blue-500'}`} />
-                  </button>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Edit3 className="h-5 w-5 text-gray-500" />
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="h-5 w-5 text-red-500" />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        {/* Image */}
-        <div className="bg-white rounded-xl overflow-hidden shadow-sm flex justify-center items-center" style={{ minHeight: 180, maxHeight: 320 }}>
-          <div className="flex justify-center items-center mb-4 relative group">
-            <img
-              src={imageUrl}
-              alt="撮影画像"
-              className="object-contain"
-              style={{ maxWidth: '100%', maxHeight: '320px', width: 'auto', height: 'auto', transform: `rotate(${rotation}deg)` }}
-            />
-            {isEditing && (
-              <div className="absolute bottom-2 left-2 flex gap-1 opacity-80 group-hover:opacity-100">
-                <button
-                  type="button"
-                  className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
-                  onClick={() => handleRotate('left')}
-                >
-                  <RotateCcw className="h-4 w-4 text-gray-700" />
-                </button>
-                <button
-                  type="button"
-                  className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
-                  onClick={() => handleRotate('right')}
-                >
-                  <RotateCw className="h-4 w-4 text-gray-700" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Date Info */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">日時情報</h2>
-          <p className="text-gray-600">作成日時: {formatDate(item.createdAt)}</p>
-          {item.updatedAt.getTime() !== item.createdAt.getTime() && (
-            <p className="text-gray-600 mt-1">最終更新: {formatDate(item.updatedAt)}</p>
-          )}
-          {item.metadata?.dateTaken && (
-            <p className="text-gray-600 mt-1">撮影日: {item.metadata.dateTaken}</p>
-          )}
-        </div>
-
-        {/* Location Info */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">位置情報</h2>
-          {item.metadata?.location ? (
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <MapPin className="h-5 w-5 text-blue-500 mt-1 flex-shrink-0" />
-                <div>
-                  <div className="text-sm text-gray-600">
-                    緯度: {item.metadata.location.lat.toFixed(6)}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    経度: {item.metadata.location.lon.toFixed(6)}
-                  </div>
-                  <a
-                    href={`https://www.google.com/maps?q=${item.metadata.location.lat},${item.metadata.location.lon}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-500 hover:text-blue-600 inline-flex items-center gap-1 mt-1"
-                  >
-                    Google Mapsで表示
-                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                      <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
-                    </svg>
-                  </a>
-                </div>
-              </div>
-              <div className="mt-4">
-                <LocationMap
-                  items={[item]}
-                  groups={[]}
-                  className="h-48 rounded-lg overflow-hidden"
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-gray-500">位置情報なし</p>
-          )}
-        </div>
-
-        {/* OCR Text */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-gray-600 mb-4">
-            <FileText className="h-5 w-5" />
-            <span className="font-medium">抽出されたテキスト</span>
-          </div>
-          {isEditing ? (
-            <textarea
-              value={editedOcrText}
-              onChange={(e) => setEditedOcrText(e.target.value)}
-              className="w-full h-32 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          ) : (
-            <div className="whitespace-pre-wrap text-gray-900 bg-gray-50 p-3 rounded-lg">
-              {item.ocrText}
-            </div>
-          )}
-        </div>
-
-        {/* Tags */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
-          <div className="flex flex-wrap gap-2">
-            {isEditing ? (
-              availableTags.map(tag => (
-                <TagChip
-                  key={tag.name}
-                  tag={tag.name}
-                  selected={editedTags.includes(tag.name)}
-                  onClick={() => handleTagToggle(tag.name)}
-                  style={{ backgroundColor: tag.color + '22', color: tag.color }}
-                />
-              ))
-            ) : (
-              item.tags.length > 0 ? (
-                item.tags.map(tag => (
-                  <TagChip 
-                    key={tag} 
-                    tag={tag} 
-                    style={{ 
-                      backgroundColor: getTagColor(tag) + '22', 
-                      color: getTagColor(tag) 
-                    }} 
-                  />
-                ))
-              ) : (
-                <p className="text-gray-500">タグが設定されていません</p>
-              )
-            )}
-          </div>
-        </div>
-
-        {/* Memo */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-gray-600 mb-4">
-            <StickyNote className="h-5 w-5" />
-            <span className="font-medium">メモ</span>
-          </div>
-          {isEditing ? (
-            <div className="flex items-center gap-2">
-            <textarea
-              value={editedMemo}
-              onChange={(e) => setEditedMemo(e.target.value)}
-              className="w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="メモを入力..."
-            />
+    <>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm sticky top-0 z-10">
+          <div className="max-w-md mx-auto px-4 py-4">
+            <div className="flex items-center gap-3">
               <button
-                type="button"
-                className={`p-2 rounded-full ${isListening ? 'bg-blue-100' : 'bg-gray-100'} ml-2`}
-                onClick={handleVoiceInput}
-                title="音声入力"
+                onClick={onBack}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                {isListening ? <MicOff className="w-5 h-5 text-blue-500" /> : <Mic className="w-5 h-5 text-gray-500" />}
+                <ArrowLeft className="h-5 w-5" />
               </button>
+              <h1 className="text-xl font-bold text-gray-900 flex-1">
+                アイテム詳細
+              </h1>
+              <div className="flex items-center gap-2">
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={handleCancel}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <X className="h-5 w-5 text-gray-500" />
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                    >
+                      <Check className="h-5 w-5 text-green-600" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleShare}
+                      disabled={isSharing}
+                      className={`p-2 rounded-lg transition-colors ${
+                        isSharing
+                          ? 'bg-gray-200 cursor-not-allowed'
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      <Share2 className="h-5 w-5" />
+                    </button>
+                    {onDelete && (
+                      <button
+                        onClick={handleDelete}
+                        className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="h-5 w-5 text-red-500" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <Edit3 className="h-5 w-5" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="text-gray-900">
-              {item.memo || (
-                <span className="text-gray-500 italic">メモはありません</span>
+          </div>
+        </div>
+
+        {isEditing && (
+          <div className="bg-yellow-100 text-yellow-800 p-2 text-center text-sm">
+            編集中
+          </div>
+        )}
+
+        <main className="max-w-md mx-auto px-4 pb-20">
+          {/* Image Display */}
+          {imageUrl && (
+            <div className="mb-4 relative">
+              <img
+                src={imageUrl}
+                alt="Postal Item"
+                className="rounded-lg w-full h-auto object-contain transition-transform duration-300"
+                style={{ transform: `rotate(${rotation}deg)` }}
+              />
+              {isEditing && (
+                <div className="absolute top-2 right-2 flex gap-2">
+                  <button
+                    onClick={() => handleRotate('left')}
+                    className="bg-white/80 p-2 rounded-full shadow-md hover:bg-white"
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => handleRotate('right')}
+                    className="bg-white/80 p-2 rounded-full shadow-md hover:bg-white"
+                  >
+                    <RotateCw className="h-5 w-5" />
+                  </button>
+                </div>
               )}
             </div>
           )}
-        </div>
+
+          {/* Tags */}
+          <div className="mb-6">
+            <div className="flex flex-wrap gap-2">
+              {isEditing
+                ? availableTags.map((tag: any) => (
+                    <TagChip
+                      key={tag.name}
+                      tag={tag.name}
+                      color={tag.color}
+                      isSelected={editedTags.includes(tag.name)}
+                      onClick={() => handleTagToggle(tag.name)}
+                    />
+                  ))
+                : item.tags.map(tag => (
+                    <TagChip key={tag} tag={tag} color={getTagColor(tag)} />
+                  ))}
+            </div>
+          </div>
+          
+          {/* Date */}
+          <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+            <Calendar className="h-4 w-4" />
+            <span>{formatDate(new Date(item.createdAt))}</span>
+          </div>
+
+          {/* OCR Text */}
+          <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-gray-400" />
+              <h3 className="text-lg font-semibold">認識されたテキスト</h3>
+            </div>
+            {isEditing ? (
+              <textarea
+                value={editedOcrText}
+                onChange={(e) => setEditedOcrText(e.target.value)}
+                className="mt-2 w-full h-32 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            ) : (
+              <div className="mt-2 whitespace-pre-wrap text-gray-900 bg-gray-50 p-3 rounded-lg">
+                {item.ocrText}
+              </div>
+            )}
+          </div>
+          
+          {/* Memo */}
+          <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+            <div className="flex items-center gap-2">
+              <StickyNote className="h-5 w-5 text-gray-400" />
+              <h3 className="text-lg font-semibold">メモ</h3>
+              {isEditing && (
+                <button onClick={handleVoiceInput} className={`p-1 rounded-full ${isListening ? 'bg-red-500 text-white' : 'bg-gray-200'}`}>
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <textarea
+                value={editedMemo}
+                onChange={(e) => setEditedMemo(e.target.value)}
+                className="mt-2 w-full h-24 p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="メモを追加..."
+              />
+            ) : (
+              <div className="mt-2 whitespace-pre-wrap text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[5rem]">
+                {item.memo || <span className="text-gray-400">メモはありません</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Location Info */}
+          {(editedLocation || isEditing) && (
+            <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+              <div className="flex items-center gap-2 justify-between">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-gray-400" />
+                  <h3 className="text-lg font-semibold">位置情報</h3>
+                </div>
+                {isEditing && (
+                  <button 
+                    onClick={() => setIsLocationEditorOpen(true)}
+                    className="text-sm bg-blue-500 text-white py-1 px-3 rounded-full hover:bg-blue-600 transition-colors"
+                  >
+                    {editedLocation ? '編集' : '追加'}
+                  </button>
+                )}
+              </div>
+              
+              {editedLocation ? (
+                <div className="mt-4">
+                  {editedLocation.name && (
+                    <p className="font-bold text-gray-800">{editedLocation.name}</p>
+                  )}
+                  <p className="text-sm text-gray-500">
+                    緯度: {editedLocation.lat.toFixed(6)}, 経度: {editedLocation.lon.toFixed(6)}
+                  </p>
+                  <div className="mt-2 h-48 rounded-lg overflow-hidden">
+                    <LocationMap 
+                      items={[{...item, metadata: {...item.metadata, location: editedLocation}}]} 
+                      groups={[]} 
+                    />
+                  </div>
+                </div>
+              ) : (
+                 isEditing && <p className="text-sm text-gray-500 mt-2">このアイテムには位置情報がありません。</p>
+              )}
+            </div>
+          )}
+        </main>
       </div>
-    </div>
+      
+      {isLocationEditorOpen && (
+        <LocationEditorModal
+          initialLocation={editedLocation}
+          onClose={() => setIsLocationEditorOpen(false)}
+          onSave={handleLocationSave}
+        />
+      )}
+    </>
   );
 };
