@@ -507,48 +507,52 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-gray-800">
-      <header className="bg-white p-4 shadow-md flex items-center justify-between z-10">
-        <div className="flex items-center gap-4">
-          <QRcode
-            value="https://snap-organizer.vercel.app/"
-            size={40}
-            style={{ height: 40, width: 40 }}
-          />
-          <h1 className="text-xl font-bold">Snap Organizer</h1>
-          {customIcon ? (
-            <div className="relative group">
-              <img
-                src={customIcon}
-                alt="アプリアイコン"
-                className="h-10 w-10 rounded-lg object-contain"
+    <div className="max-w-md mx-auto bg-gray-50 min-h-screen">
+      <header className="sticky top-0 z-30 bg-gradient-to-r from-gray-50 to-blue-50 backdrop-blur-sm shadow-sm">
+        <div className="max-w-md mx-auto px-4">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center gap-2">
+              <QRcode
+                value="https://snap-organizer.vercel.app/"
+                size={40}
+                style={{ height: 40, width: 40 }}
               />
-              <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <h1 className="text-xl font-bold">Snap Organizer</h1>
+              {customIcon ? (
+                <div className="relative group">
+                  <img
+                    src={customIcon}
+                    alt="アプリアイコン"
+                    className="h-10 w-10 rounded-lg object-contain"
+                  />
+                  <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={handleRemoveIcon}
+                      className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <button
-                  onClick={handleRemoveIcon}
-                  className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                  onClick={() => iconInputRef.current?.click()}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="アイコンを設定"
                 >
-                  <X className="h-3 w-3" />
+                  <Image className="h-5 w-5" />
                 </button>
-              </div>
+              )}
             </div>
-          ) : (
-            <button
-              onClick={() => iconInputRef.current?.click()}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="アイコンを設定"
-            >
-              <Image className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setShowImportModal(true)} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="インポート">
-            <Download className="w-6 h-6" />
-          </button>
-          <button onClick={handleExportClick} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="エクスポート/共有">
-            <Upload className="w-6 h-6" />
-          </button>
+            <div className="flex items-center space-x-2">
+              <button onClick={() => setShowImportModal(true)} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="インポート">
+                <Download className="w-6 h-6" />
+              </button>
+              <button onClick={handleExportClick} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="エクスポート/共有">
+                <Upload className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
