@@ -110,24 +110,17 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
 };
 
 // 統合データの読み込み
-export async function loadAllData(): Promise<{ items: PhotoItem[]; groups: PostalItemGroup[] }> {
+export async function loadAllData(): Promise<StorageData> {
   try {
     const database = await initDB();
-    const tx = database.transaction(DATA_STORE, 'readonly');
-    const store = tx.objectStore(DATA_STORE);
-
-    const [items, groups] = await Promise.all([
-      store.get('items') || [],
-      store.get('groups') || []
-    ]);
-
-    return {
-      items: items || [],
-      groups: groups || []
-    };
+    const data = await database.get(DATA_STORE, 'storage_data');
+    if (!data) {
+      return { items: [], groups: [], tags: [] };
+    }
+    return data;
   } catch (error) {
     console.error('データの読み込みに失敗しました:', error);
-    return { items: [], groups: [] };
+    return { items: [], groups: [], tags: [] };
   }
 }
 
