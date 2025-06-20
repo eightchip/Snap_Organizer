@@ -182,24 +182,28 @@ function App() {
       const imageIdsToDelete = new Set<string>();
       
       // 単一アイテムの画像
-      items
+      (items || [])
         .filter(item => itemIds.includes(item.id))
-        .forEach(item => imageIdsToDelete.add(item.image));
+        .forEach(item => {
+          if (item.image) imageIdsToDelete.add(item.image);
+        });
       
       // グループ内の画像
-      groups
+      (groups || [])
         .filter(group => groupIds.includes(group.id))
         .forEach(group => {
-          group.photos.forEach(photo => imageIdsToDelete.add(photo.image));
+          (group.photos || []).forEach(photo => {
+            if (photo.image) imageIdsToDelete.add(photo.image);
+          });
         });
 
       // データの削除
-      const data = loadAllData();
-      data.items = data.items.filter(item => !itemIds.includes(item.id));
-      data.groups = data.groups.filter(group => !groupIds.includes(group.id));
+      const data = await loadAllData();
+      const updatedItems = (data.items || []).filter(item => !itemIds.includes(item.id));
+      const updatedGroups = (data.groups || []).filter(group => !groupIds.includes(group.id));
       
       // データを保存
-      await saveAllData(data);
+      await saveAllData({ ...data, items: updatedItems, groups: updatedGroups });
       
       // 画像の削除
       for (const imageId of imageIdsToDelete) {
@@ -211,8 +215,8 @@ function App() {
       }
 
       // 状態を更新
-      setItems(data.items);
-      setGroups(data.groups);
+      setItems(updatedItems);
+      setGroups(updatedGroups);
     } catch (error: any) {
       setError(error.message || '削除に失敗しました');
       console.error('Delete error:', error);
