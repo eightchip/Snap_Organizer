@@ -6,8 +6,30 @@ import { UnifiedAddScreen } from './components/screens/UnifiedAddScreen';
 import { DetailScreen } from './components/screens/DetailScreen';
 import { DetailGroupScreen } from './components/screens/DetailGroupScreen';
 import { SyncScreen } from './components/SyncScreen';
-import { loadAllData, saveAllData, saveItems, saveGroups } from './utils/storage';
-import { deleteImageBlob } from './utils/imageDB';
+import { loadAllData, saveAllData } from './utils/storage';
+import { deleteImageBlob, loadImageBlob, saveImageBlob } from './utils/imageDB';
+
+// Base64ヘルパー関数
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+const base64ToBlob = (base64: string): Blob => {
+  const parts = base64.split(';base64,');
+  const contentType = parts[0].split(':')[1];
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  const uInt8Array = new Uint8Array(rawLength);
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  return new Blob([uInt8Array], { type: contentType });
+};
 
 function App() {
   const {
@@ -48,28 +70,37 @@ function App() {
   const handleImport = async (jsonData: any) => {
     setError(null);
     try {
-      // If the jsonData has a 'data' property, use that as the source
       const data = jsonData.data ? jsonData.data : jsonData;
-
       if (!data.items && !data.groups && !data.tags) {
         throw new Error('インポートするデータが見つかりません');
       }
 
-      // 日付の修正
-      const fixItems = (items: any[]) => items.map(item => ({
-        ...item,
-        createdAt: new Date(item.createdAt),
-        updatedAt: new Date(item.updatedAt)
-      }));
+      const fixDatesAndImages = async (items: any[]) => {
+        for (const item of items) {
+          item.createdAt = new Date(item.createdAt);
+          item.updatedAt = new Date(item.updatedAt);
+          if (item.imageData && item.image) {
+            const blob = base64ToBlob(item.imageData);
+            await saveImageBlob(item.image, blob);
+          }
+          if (item.photos) { // For groups
+            await fixDatesAndImages(item.photos);
+          }
+        }
+        return items.map((item: any) => {
+          const { imageData, ...rest } = item;
+          return rest;
+        });
+      };
 
       if (data.items) {
-        const fixedItems = fixItems(data.items);
+        const fixedItems = await fixDatesAndImages(data.items);
         for (const item of fixedItems) {
           await addItem(item);
         }
       }
       if (data.groups) {
-        const fixedGroups = fixItems(data.groups);
+        const fixedGroups = await fixDatesAndImages(data.groups);
         for (const group of fixedGroups) {
           await addGroup(group);
         }
@@ -84,18 +115,42 @@ function App() {
   };
 
   // エクスポート
-  const handleExport = () => {
-    const data = {
-      items,
-      groups,
-      tags: getTags(),
-      version: '1.0'
+  const handleExport = async () => {
+    const data = { items, groups, tags: getTags() };
+    
+    const itemsWithImageData = await Promise.all(
+      (data.items || []).map(async item => {
+        if (!item.image) return item;
+        const blob = await loadImageBlob(item.image);
+        const imageData = blob ? await blobToBase64(blob) : null;
+        return { ...item, imageData };
+      })
+    );
+
+    const groupsWithImageData = await Promise.all(
+      (data.groups || []).map(async group => {
+        const photosWithImageData = await Promise.all(
+          (group.photos || []).map(async photo => {
+            if (!photo.image) return photo;
+            const blob = await loadImageBlob(photo.image);
+            const imageData = blob ? await blobToBase64(blob) : null;
+            return { ...photo, imageData };
+          })
+        );
+        return { ...group, photos: photosWithImageData };
+      })
+    );
+
+    return {
+      version: '1.1', // New version with image data
+      items: itemsWithImageData,
+      groups: groupsWithImageData,
+      tags: data.tags
     };
-    return data;
   };
 
-  const handleDownloadExport = () => {
-    const data = handleExport();
+  const handleDownloadExport = async () => {
+    const data = await handleExport();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -159,22 +214,25 @@ function App() {
   const handleBulkTagRename = async (oldName: string, newName: string) => {
     setError(null);
     try {
-      // アイテムのタグ更新
-      const updatedItems = items.map(item => ({
+      const currentData = await loadAllData();
+      const updatedItems = (currentData.items || []).map(item => ({
         ...item,
-        tags: item.tags.map(t => t === oldName ? newName : t)
+        tags: (item.tags || []).map(t => t === oldName ? newName : t)
       }));
-      // グループのタグ更新
-      const updatedGroups = groups.map(group => ({
+      const updatedGroups = (currentData.groups || []).map(group => ({
         ...group,
-        tags: group.tags.map(t => t === oldName ? newName : t)
+        tags: (group.tags || []).map(t => t === oldName ? newName : t)
       }));
-      // 一括更新
-      await saveItems(updatedItems);
-      await saveGroups(updatedGroups);
+      
+      const updatedData = { ...currentData, items: updatedItems, groups: updatedGroups };
+      await saveAllData(updatedData);
+
+      // Update local state
+      setItems(updatedItems);
+      setGroups(updatedGroups);
     } catch (error: any) {
-      setError(error.message || 'タグの更新に失敗しました');
-      console.error('Tag update error:', error);
+      setError(error.message || 'タグの一括変更に失敗しました');
+      console.error('Tag rename error:', error);
     }
   };
 

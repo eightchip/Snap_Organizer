@@ -36,77 +36,34 @@ const initDB = async () => {
   return db;
 };
 
-export const saveItems = async (items: PhotoItem[]): Promise<void> => {
-  const database = await initDB();
-  const oldData = await loadStorageData();
-  
-  // 削除された画像を特定して削除
-  const oldImageIds = new Set(oldData.items.map(item => item.image));
-  const newImageIds = new Set(items.map(item => item.image));
-  for (const oldId of oldImageIds) {
-    if (!newImageIds.has(oldId)) {
-      await deleteImageBlob(oldId);
-    }
-  }
-
-  const data = { ...oldData, items };
-  await database.put(DATA_STORE, data, 'storage_data');
-};
-
-export const loadItems = async (): Promise<PhotoItem[]> => {
-  const data = await loadStorageData();
-  return data.items.map(item => ({
-    ...item,
-    createdAt: new Date(item.createdAt),
-    updatedAt: new Date(item.updatedAt)
-  }));
-};
-
-export const saveGroups = async (groups: PostalItemGroup[]): Promise<void> => {
-  const database = await initDB();
-  const oldData = await loadStorageData();
-  
-  // 削除された画像を特定して削除
-  const oldImageIds = new Set(oldData.groups.flatMap(group => group.photos.map(photo => photo.image)));
-  const newImageIds = new Set(groups.flatMap(group => group.photos.map(photo => photo.image)));
-  for (const oldId of oldImageIds) {
-    if (!newImageIds.has(oldId)) {
-      await deleteImageBlob(oldId);
-    }
-  }
-
-  const data = { ...oldData, groups };
-  await database.put(DATA_STORE, data, 'storage_data');
-};
-
-export const loadGroups = async (): Promise<PostalItemGroup[]> => {
-  const data = await loadStorageData();
-  return data.groups.map(group => ({
-    ...group,
-    createdAt: new Date(group.createdAt),
-    updatedAt: new Date(group.updatedAt)
-  }));
-};
-
-const loadStorageData = async (): Promise<StorageData> => {
-  const database = await initDB();
-  const data = await database.get(DATA_STORE, 'storage_data');
-  if (!data) {
-    return { items: [], groups: [], tags: [] };
-  }
-  return data;
-};
-
-export const generateId = (): string => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-};
-
-// 統合データの保存
+// 統合データの保存（この関数が唯一の保存手段となる）
 export const saveAllData = async (data: StorageData): Promise<void> => {
   const database = await initDB();
-  if (data.items) await saveItems(data.items);
-  if (data.groups) await saveGroups(data.groups);
-  if (data.tags) await database.put(DATA_STORE, data.tags, 'tags');
+  const oldData = await loadAllData();
+
+  // 削除された画像を特定してDBから削除
+  const oldImageIds = new Set([
+    ...(oldData.items || []).map(i => i.image),
+    ...(oldData.groups || []).flatMap(g => (g.photos || []).map(p => p.image))
+  ].filter(Boolean)); // nullやundefinedを除外
+
+  const newImageIds = new Set([
+    ...(data.items || []).map(i => i.image),
+    ...(data.groups || []).flatMap(g => (g.photos || []).map(p => p.image))
+  ].filter(Boolean));
+
+  for (const oldId of oldImageIds) {
+    if (!newImageIds.has(oldId)) {
+      try {
+        await deleteImageBlob(oldId);
+      } catch (error) {
+        console.error(`Failed to delete orphaned image ${oldId}:`, error);
+      }
+    }
+  }
+
+  // 新しいデータ全体を保存
+  await database.put(DATA_STORE, data, 'storage_data');
 };
 
 // 統合データの読み込み
@@ -123,6 +80,10 @@ export async function loadAllData(): Promise<StorageData> {
     return { items: [], groups: [], tags: [] };
   }
 }
+
+export const generateId = (): string => {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
 
 // アプリアイコンの保存と取得
 export async function saveAppIcon(blob: Blob): Promise<string | null> {
@@ -141,9 +102,9 @@ export const getAppIcon = (): string | null => {
 };
 
 export const removeAppIcon = () => {
-  localStorage.removeItem('app_icon');
   const iconUrl = localStorage.getItem('app_icon');
   if (iconUrl) {
     URL.revokeObjectURL(iconUrl);
+    localStorage.removeItem('app_icon');
   }
 };

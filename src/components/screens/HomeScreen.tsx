@@ -30,7 +30,7 @@ interface HomeScreenProps {
   onBulkTagRename: (oldName: string, newName: string) => void;
   onImport: (data: any) => void;
   onExport: () => void;
-  getExportData: () => { items: PhotoItem[], groups: PostalItemGroup[], tags: any[], version: string };
+  getExportData: () => Promise<any>;
   onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
   onSync: () => void;
 }
@@ -297,7 +297,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   const handleShareViaEmail = async () => {
-    const exportData = getExportData();
+    const exportData = await getExportData();
     const syncData = await syncManager.prepareSyncData(exportData.items, exportData.groups, exportData.tags);
     const emailContent = await syncManager.generateEmailBackup(syncData);
     
