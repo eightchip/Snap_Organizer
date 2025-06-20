@@ -508,6 +508,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="max-w-md mx-auto bg-gray-50 min-h-screen">
+      <input
+        type="file"
+        ref={iconInputRef}
+        onChange={handleIconSelect}
+        className="hidden"
+        accept="image/*"
+      />
       <header className="sticky top-0 z-30 bg-gradient-to-r from-gray-50 to-blue-50 backdrop-blur-sm shadow-sm">
         <div className="max-w-md mx-auto px-4">
           <div className="flex justify-between items-center py-4">
@@ -518,7 +525,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 style={{ height: 40, width: 40 }}
               />
               <h1 className="text-xl font-bold">Snap Organizer</h1>
-              {customIcon ? (
+            </div>
+            <div className="flex items-center gap-2">
+               {customIcon ? (
                 <div className="relative group">
                   <img
                     src={customIcon}
@@ -543,8 +552,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <Image className="h-5 w-5" />
                 </button>
               )}
-            </div>
-            <div className="flex items-center space-x-2">
               <button onClick={() => setShowImportModal(true)} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="インポート">
                 <Download className="w-6 h-6" />
               </button>
