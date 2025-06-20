@@ -45,9 +45,12 @@ function App() {
   };
 
   // インポート
-  const handleImport = async (data: any) => {
+  const handleImport = async (jsonData: any) => {
     setError(null);
     try {
+      // If the jsonData has a 'data' property, use that as the source
+      const data = jsonData.data ? jsonData.data : jsonData;
+
       if (!data.items && !data.groups && !data.tags) {
         throw new Error('インポートするデータが見つかりません');
       }
