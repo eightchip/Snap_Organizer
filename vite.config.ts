@@ -38,6 +38,10 @@ export default defineConfig({
       input: {
         main: './index.html',
       },
+      external: ['@tauri-apps/api/tauri'],
     },
-  }
+  },
+  define: {
+    global: 'globalThis',
+  },
 }); 

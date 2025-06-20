@@ -251,7 +251,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const handleAdvancedSearch = async (query: SearchQuery) => {
     setCurrentSearchMode('advanced');
     setShowSearchResults(true);
-    await advancedSearch(query);
+    await advancedSearch(query, items, groups);
   };
 
   // 基本的な検索を実行
@@ -272,7 +272,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       limit: 50,
     };
     
-    await advancedSearch(searchQuery);
+    await advancedSearch(searchQuery, items, groups);
   };
 
   // 検索結果からアイテムを取得
