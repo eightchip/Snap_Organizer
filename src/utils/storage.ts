@@ -62,7 +62,7 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
     }
   }
 
-  // 新しいデータ全体を保存
+  // 新しいデータ全体を保存する
   await database.put(DATA_STORE, data, 'storage_data');
 };
 
