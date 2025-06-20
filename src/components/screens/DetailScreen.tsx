@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { PhotoItem, Location } from '../../types';
 import { TagChip } from '../TagChip';
-import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2, RotateCw, RotateCcw, MapPin } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2, RotateCw, RotateCcw, MapPin, Navigation } from 'lucide-react';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareItem } from '../../utils/share';
 import { LocationMap } from '../LocationMap';
 import LocationEditorModal from '../LocationEditorModal';
+import NavigationModal from '../NavigationModal';
 
 interface DetailScreenProps {
   item: PhotoItem;
@@ -49,6 +50,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isLocationEditorOpen, setIsLocationEditorOpen] = useState(false);
+  const [isNavigationModalOpen, setIsNavigationModalOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     return saved ? JSON.parse(saved) : [];
@@ -228,6 +230,12 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     setIsLocationEditorOpen(false);
   };
 
+  const handleNavigation = () => {
+    if (editedLocation) {
+      setIsNavigationModalOpen(true);
+    }
+  };
+
   return (
     <>
       <div className="min-h-screen bg-gray-50">
@@ -338,7 +346,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
                       key={tag.name}
                       tag={tag.name}
                       color={tag.color}
-                      isSelected={editedTags.includes(tag.name)}
+                      selected={editedTags.includes(tag.name)}
                       onClick={() => handleTagToggle(tag.name)}
                     />
                   ))
@@ -406,14 +414,25 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
                   <MapPin className="h-5 w-5 text-gray-400" />
                   <h3 className="text-lg font-semibold">位置情報</h3>
                 </div>
-                {isEditing && (
-                  <button 
-                    onClick={() => setIsLocationEditorOpen(true)}
-                    className="text-sm bg-blue-500 text-white py-1 px-3 rounded-full hover:bg-blue-600 transition-colors"
-                  >
-                    {editedLocation ? '編集' : '追加'}
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {editedLocation && !isEditing && (
+                    <button 
+                      onClick={handleNavigation}
+                      className="text-sm bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition-colors flex items-center gap-1"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      ここへ行く
+                    </button>
+                  )}
+                  {isEditing && (
+                    <button 
+                      onClick={() => setIsLocationEditorOpen(true)}
+                      className="text-sm bg-blue-500 text-white py-1 px-3 rounded-full hover:bg-blue-600 transition-colors"
+                    >
+                      {editedLocation ? '編集' : '追加'}
+                    </button>
+                  )}
+                </div>
               </div>
               
               {editedLocation ? (
@@ -444,6 +463,13 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
           initialLocation={editedLocation}
           onClose={() => setIsLocationEditorOpen(false)}
           onSave={handleLocationSave}
+        />
+      )}
+
+      {isNavigationModalOpen && editedLocation && (
+        <NavigationModal
+          destination={editedLocation}
+          onClose={() => setIsNavigationModalOpen(false)}
         />
       )}
     </>
