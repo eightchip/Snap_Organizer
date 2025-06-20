@@ -63,21 +63,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           )}
         </div>
         
-        {/* 検索対象の説明 */}
-        {!value && (
-          <div className="absolute top-full left-0 right-0 mt-1 px-3 py-2 bg-gray-50 rounded-lg text-xs text-gray-500 shadow-lg z-10">
-            <div className="flex items-center gap-1 mb-1">
-              <Sparkles className="h-3 w-3" />
-              <span className="font-medium">検索対象:</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              <span>• OCRテキスト</span>
-              <span>• メモ内容</span>
-              <span>• タグ</span>
-              <span>• 位置情報・施設名</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 高度な検索モーダル */}
