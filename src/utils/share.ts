@@ -99,4 +99,55 @@ export const shareGroup = async (group: PostalItemGroup): Promise<boolean> => {
     console.error('Error sharing group:', error);
     return false;
   }
+};
+
+/**
+ * メールでデータを共有する
+ * navigator.shareが利用可能な場合はそれを使用し、
+ * そうでない場合はmailto:リンクにフォールバックする
+ */
+export const shareDataViaEmail = async (
+  subject: string,
+  body: string,
+  attachment: Blob,
+  filename: string
+) => {
+  const file = new File([attachment], filename, { type: attachment.type });
+
+  // Web Share APIが利用可能で、ファイルを共有できるかチェック
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: subject,
+        text: body,
+        files: [file],
+      });
+      console.log('Successfully shared data via Web Share API');
+    } catch (error) {
+      console.error('Error using Web Share API:', error);
+      // Web Share APIが失敗した場合、mailtoにフォールバック
+      fallbackToMailto(subject, body);
+    }
+  } else {
+    // Web Share APIが利用できない場合、mailtoにフォールバック
+    fallbackToMailto(subject, body);
+  }
+};
+
+/**
+ * mailto:リンクを生成してメールクライアントを開く
+ */
+const fallbackToMailto = (subject: string, body: string) => {
+  const mailtoBody = `
+${body}
+
+---
+添付ファイルについて:
+お使いの環境ではファイルの共有がサポートされていません。
+お手数ですが、アプリからエクスポートしたJSONファイルを添付して送信してください。
+`;
+  const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
+  
+  // 新しいウィンドウで開くか、現在のウィンドウをリダイレクトする
+  window.open(mailtoLink, '_blank');
 }; 

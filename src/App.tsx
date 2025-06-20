@@ -88,6 +88,11 @@ function App() {
       tags: getTags(),
       version: '1.0'
     };
+    return data;
+  };
+
+  const handleDownloadExport = () => {
+    const data = handleExport();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -230,7 +235,8 @@ function App() {
             onGroupClick={handleGroupClick}
             onBulkTagRename={handleBulkTagRename}
             onImport={handleImport}
-            onExport={handleExport}
+            onExport={handleDownloadExport}
+            getExportData={handleExport}
             onBulkDelete={handleBulkDelete}
             onSync={() => navigateTo({ type: 'sync' })}
           />

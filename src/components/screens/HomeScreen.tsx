@@ -14,6 +14,8 @@ import { LocationMap } from '../LocationMap';
 import { saveAppIcon, getAppIcon, removeAppIcon } from '../../utils/storage';
 import { resizeImage } from '../../utils/imageResize';
 import { imageToDataURL } from '../../utils/ocr';
+import { SyncManager } from '../../utils/syncUtils';
+import { shareDataViaEmail } from '../../utils/share';
 
 interface HomeScreenProps {
   items: PhotoItem[];
@@ -28,6 +30,7 @@ interface HomeScreenProps {
   onBulkTagRename: (oldName: string, newName: string) => void;
   onImport: (data: any) => void;
   onExport: () => void;
+  getExportData: () => { items: PhotoItem[], groups: PostalItemGroup[], tags: any[], version: string };
   onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
   onSync: () => void;
 }
@@ -107,6 +110,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onBulkTagRename,
   onImport,
   onExport,
+  getExportData,
   onBulkDelete,
   onSync
 }) => {
@@ -149,6 +153,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const [customIcon, setCustomIcon] = useState<string | null>(getAppIcon());
   const iconInputRef = useRef<HTMLInputElement>(null);
+
+  const [showShareModal, setShowShareModal] = useState(false);
+  const syncManager = useMemo(() => new SyncManager(), []);
 
   // 画像URLの読み込み
   useEffect(() => {
@@ -280,24 +287,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     };
   }, [items, groups, searchQuery, selectedTags, startDate, endDate]);
 
-  // エクスポート機能
-  const handleExport = () => {
-    const data = {
-      items,
-      groups,
-      tags,
-      version: '1.0'
-    };
-    const jsonStr = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `postal_snap_export_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleExportClick = () => {
+    setShowShareModal(true);
+  };
+
+  const handleDownloadJson = () => {
+    onExport();
+    setShowShareModal(false);
+  };
+
+  const handleShareViaEmail = async () => {
+    const exportData = getExportData();
+    const syncData = await syncManager.prepareSyncData(exportData.items, exportData.groups, exportData.tags);
+    const emailContent = await syncManager.generateEmailBackup(syncData);
+    
+    await shareDataViaEmail(
+      emailContent.subject,
+      emailContent.body,
+      emailContent.attachment,
+      `snap-organizer-backup-${Date.now()}.json`
+    );
+    setShowShareModal(false);
   };
 
   // インポート処理
@@ -390,82 +400,53 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* App Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-md mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <QRcode
-                value="https://snap-organizer.vercel.app/"
-                size={40}
-                style={{ height: 40, width: 40 }}
+    <div className="flex flex-col h-screen bg-gray-50 text-gray-800">
+      <header className="bg-white p-4 shadow-md flex items-center justify-between z-10">
+        <div className="flex items-center gap-4">
+          <QRcode
+            value="https://snap-organizer.vercel.app/"
+            size={40}
+            style={{ height: 40, width: 40 }}
+          />
+          <h1 className="text-xl font-bold">Snap Organizer</h1>
+          {customIcon ? (
+            <div className="relative group">
+              <img
+                src={customIcon}
+                alt="アプリアイコン"
+                className="h-10 w-10 rounded-lg object-contain"
               />
-              <h1 className="text-xl font-bold">Snap Organizer</h1>
-              {customIcon ? (
-                <div className="relative group">
-                  <img
-                    src={customIcon}
-                    alt="アプリアイコン"
-                    className="h-10 w-10 rounded-lg object-contain"
-                  />
-                  <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={handleRemoveIcon}
-                      className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
-                  onClick={() => iconInputRef.current?.click()}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="アイコンを設定"
+                  onClick={handleRemoveIcon}
+                  className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
                 >
-                  <Image className="h-5 w-5" />
+                  <X className="h-3 w-3" />
                 </button>
-              )}
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={onSync}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="同期・バックアップ"
-              >
-                <RefreshCw className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="データをインポート"
-              >
-                <Upload className="h-5 w-5" />
-              </button>
-              <button
-                onClick={handleExport}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="全体をエクスポート"
-              >
-                <Download className="h-5 w-5" />
-              </button>
-              <input
-                ref={iconInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleIconSelect}
-                className="hidden"
-              />
-            </div>
-          </div>
+          ) : (
+            <button
+              onClick={() => iconInputRef.current?.click()}
+              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              title="アイコンを設定"
+            >
+              <Image className="h-5 w-5" />
+            </button>
+          )}
         </div>
-      </div>
+        <div className="flex items-center space-x-2">
+          <button onClick={() => setShowImportModal(true)} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="インポート">
+            <Download className="w-6 h-6" />
+          </button>
+          <button onClick={handleExportClick} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="エクスポート/共有">
+            <Upload className="w-6 h-6" />
+          </button>
+        </div>
+      </header>
 
-      {/* Search, Share and Add Button */}
       <div className="sticky top-0 bg-white shadow-sm z-10">
         <div className="max-w-md mx-auto px-4">
-          {/* Search Bar Row */}
           <div className="flex items-center gap-2 py-4">
             <div className="flex-1">
               <SearchBar
@@ -483,13 +464,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <Map className="h-5 w-5" />
               </button>
               <button
-                onClick={handleExport}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="全体をエクスポート"
-              >
-                <Share2 className="h-5 w-5" />
-              </button>
-              <button
                 onClick={() => onAddItem('unified')}
                 className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors shadow-md"
                 title="写真を追加"
@@ -499,7 +473,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           </div>
 
-          {/* Map View */}
           {showMap && (
             <div className="mb-4 bg-white rounded-xl shadow-sm overflow-hidden">
               <LocationMap
@@ -511,7 +484,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           )}
 
-          {/* Calendar Row */}
           <div className="flex items-center gap-2 pb-4">
             <input
               type="date"
@@ -539,7 +511,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
 
-      {/* Tag Filter */}
       <div className="max-w-md mx-auto px-4 py-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -639,7 +610,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         )}
       </div>
 
-      {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -697,7 +667,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
 
-      {/* Items List */}
       <div className="max-w-md mx-auto px-4">
         {filteredItems.length === 0 && filteredGroups.length === 0 ? (
           <div className="text-center py-12">
@@ -707,7 +676,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Display single items */}
             {filteredItems.map(item => (
               <div key={item.id} className="relative">
                 {isSelectionMode && (
@@ -729,7 +697,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 />
               </div>
             ))}
-            {/* Display groups */}
             {filteredGroups.map(group => (
               <div key={group.id} className="relative">
                 {isSelectionMode && (
@@ -755,7 +722,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         )}
       </div>
 
-      {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
@@ -830,6 +796,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
+            <h2 className="text-xl font-bold mb-4">エクスポート/共有</h2>
+            <p className="mb-6">データのエクスポート方法を選択してください。</p>
+            <div className="space-y-4">
+              <button
+                onClick={handleDownloadJson}
+                className="w-full flex items-center justify-center p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                <Download className="w-5 h-5 mr-2" />
+                JSONファイルとしてダウンロード
+              </button>
+              <button
+                onClick={handleShareViaEmail}
+                className="w-full flex items-center justify-center p-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              >
+                <Share2 className="w-5 h-5 mr-2" />
+                Eメールで共有
+              </button>
+            </div>
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="mt-6 w-full p-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              キャンセル
+            </button>
           </div>
         </div>
       )}
