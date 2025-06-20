@@ -104,10 +104,13 @@ export class SyncManager {
     const minimalData = {
       items: items.map(item => ({
         id: item.id,
+        image: item.image,
         tags: item.tags || [],
         memo: item.memo || '',
         createdAt: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
-        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime()
+        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime(),
+        metadata: item.metadata,
+        ocrText: item.ocrText,
       })),
       groups: groups.map(group => ({
         id: group.id,
@@ -118,8 +121,11 @@ export class SyncManager {
         updatedAt: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
         photos: group.photos.map(photo => ({
           id: photo.id,
+          image: photo.image,
           tags: photo.tags || [],
-          memo: photo.memo || ''
+          memo: photo.memo || '',
+          metadata: photo.metadata,
+          ocrText: photo.ocrText,
         }))
       })),
       tags: tags
@@ -153,10 +159,13 @@ export class SyncManager {
         d: syncData.deviceId,
         i: syncData.data.items.map(item => [
           item.id,
+          item.image,
           item.tags || [],
           item.memo || '',
           this.normalizeTimestamp(item.createdAt),
-          this.normalizeTimestamp(item.updatedAt)
+          this.normalizeTimestamp(item.updatedAt),
+          item.metadata,
+          item.ocrText,
         ]),
         g: syncData.data.groups.map(group => [
           group.id,
@@ -167,8 +176,11 @@ export class SyncManager {
           this.normalizeTimestamp(group.updatedAt),
           (group.photos || []).map(photo => [
             photo.id,
+            photo.image,
             photo.tags || [],
-            photo.memo || ''
+            photo.memo || '',
+            photo.metadata,
+            photo.ocrText,
           ])
         ]),
         tg: syncData.data.tags || []
@@ -486,10 +498,13 @@ export class SyncManager {
       data: {
         items: data.i.map((item: any[]) => ({
           id: item[0],
-          tags: item[1],
-          memo: item[2],
-          createdAt: item[3],
-          updatedAt: item[4]
+          image: item[1],
+          tags: item[2],
+          memo: item[3],
+          createdAt: item[4],
+          updatedAt: item[5],
+          metadata: item[6],
+          ocrText: item[7],
         })),
         groups: data.g.map((group: any[]) => ({
           id: group[0],
@@ -500,8 +515,11 @@ export class SyncManager {
           updatedAt: group[5],
           photos: group[6].map((photo: any[]) => ({
             id: photo[0],
-            tags: photo[1],
-            memo: photo[2]
+            image: photo[1],
+            tags: photo[2],
+            memo: photo[3],
+            metadata: photo[4],
+            ocrText: photo[5],
           }))
         })),
         tags: data.tg

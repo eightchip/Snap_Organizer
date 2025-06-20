@@ -65,7 +65,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         
         {/* 検索対象の説明 */}
         {!value && (
-          <div className="absolute top-full left-0 right-0 mt-1 px-3 py-2 bg-gray-50 rounded-lg text-xs text-gray-500">
+          <div className="absolute top-full left-0 right-0 mt-1 px-3 py-2 bg-gray-50 rounded-lg text-xs text-gray-500 shadow-lg z-10">
             <div className="flex items-center gap-1 mb-1">
               <Sparkles className="h-3 w-3" />
               <span className="font-medium">検索対象:</span>
