@@ -9,6 +9,9 @@ const META_STORE = 'metadata';
 export let db: IDBPDatabase | null = null;
 
 const initDB = async () => {
+  if (typeof window === 'undefined') {
+    throw new Error('IndexedDBはクライアントサイドでのみ利用可能です');
+  }
   if (db) return db;
   
   db = await openDB(DB_NAME, DB_VERSION, {
