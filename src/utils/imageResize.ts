@@ -125,7 +125,12 @@ async function resizeImageWithCanvas(base64Image: string, maxWidth: number, maxH
       ctx.drawImage(img, 0, 0, width, height);
 
       // JPEG形式で出力
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (!dataUrl.startsWith('data:image/jpeg;base64,')) {
+        reject(new Error('画像データの生成に失敗しました（JPEG形式で出力できませんでした）'));
+        return;
+      }
+      resolve(dataUrl);
     };
     img.onerror = () => reject(new Error('Failed to load image'));
     img.src = base64Image;
