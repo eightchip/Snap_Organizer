@@ -383,9 +383,24 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
               <StickyNote className="h-5 w-5 text-gray-400" />
               <h3 className="text-lg font-semibold">メモ</h3>
               {isEditing && (
-                <button onClick={handleVoiceInput} className={`p-1 rounded-full ${isListening ? 'bg-red-500 text-white' : 'bg-gray-200'}`}>
-                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </button>
+                <>
+                  <button onClick={handleVoiceInput} className={`p-1 rounded-full ${isListening ? 'bg-red-500 text-white' : 'bg-gray-200'}`}>
+                    {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </button>
+                  <select
+                    value={speechLang}
+                    onChange={e => setSpeechLang(e.target.value)}
+                    className="border rounded p-1 ml-2"
+                    title="音声認識の言語を選択"
+                  >
+                    <option value="ja-JP">日本語</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="zh-CN">中文 (中国語)</option>
+                    <option value="ko-KR">한국어 (韓国語)</option>
+                    <option value="fr-FR">Français</option>
+                    <option value="de-DE">Deutsch</option>
+                  </select>
+                </>
               )}
             </div>
             {isEditing ? (
@@ -468,21 +483,6 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
           onClose={() => setIsNavigationModalOpen(false)}
         />
       )}
-
-      {/* UIに言語選択ドロップダウンを追加（音声入力ボタン付近など適切な場所に） */}
-      <select
-        value={speechLang}
-        onChange={e => setSpeechLang(e.target.value)}
-        className="border rounded p-1 ml-2"
-        title="音声認識の言語を選択"
-      >
-        <option value="ja-JP">日本語</option>
-        <option value="en-US">English (US)</option>
-        <option value="zh-CN">中文 (中国語)</option>
-        <option value="ko-KR">한국어 (韓国語)</option>
-        <option value="fr-FR">Français</option>
-        <option value="de-DE">Deutsch</option>
-      </select>
     </>
   );
 };
