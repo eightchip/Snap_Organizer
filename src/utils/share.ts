@@ -1,6 +1,4 @@
 import { PhotoItem, PostalItemGroup } from '../types';
-import { loadImageBlob } from './imageDB';
-import JSZip from 'jszip';
 
 /**
  * Web Share APIのサポート状況をチェック
@@ -12,9 +10,9 @@ export const isWebShareSupported = () => {
 /**
  * 画像をBlobからFileに変換
  */
-const blobToFile = (blob: Blob, fileName: string): File => {
-  return new File([blob], fileName, { type: blob.type });
-};
+// const blobToFile = (blob: Blob, fileName: string): File => {
+//   return new File([blob], fileName, { type: blob.type });
+// };
 
 const createShareableText = (item: PhotoItem): string => {
   const lines: string[] = [];

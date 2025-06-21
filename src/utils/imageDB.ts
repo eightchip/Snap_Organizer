@@ -24,6 +24,9 @@ const initDB = async () => {
         metaStore.createIndex('location', ['location.lat', 'location.lon']);
         metaStore.createIndex('tags', 'tags', { multiEntry: true });
       }
+      if (!db.objectStoreNames.contains('data')) {
+        db.createObjectStore('data');
+      }
     },
   });
   

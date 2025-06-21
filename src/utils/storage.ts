@@ -1,43 +1,13 @@
-import { PhotoItem, PostalItemGroup, StorageData } from '../types';
-import { db as imageDB, saveImageBlob, loadImageBlob, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB, saveMetadata, loadMetadata } from './imageDB';
+import { StorageData } from '../types';
+import { db as imageDB, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB } from './imageDB';
 
-const DB_NAME = 'postal_snap_db';
-const DB_VERSION = 4;
-const STORE_NAME = 'images';
-const DATA_STORE = 'app_data';
-const META_STORE = 'metadata';
-
-let db: IDBPDatabase | null = null;
-
-const initDB = async () => {
-  if (db) return db;
-  
-  db = await openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion) {
-      // 画像バイナリ用のストア
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
-      }
-      // アプリデータ用のストア
-      if (!db.objectStoreNames.contains(DATA_STORE)) {
-        db.createObjectStore(DATA_STORE);
-      }
-      // メタデータ用のストア
-      if (!db.objectStoreNames.contains(META_STORE)) {
-        const metaStore = db.createObjectStore(META_STORE, { keyPath: 'filename' });
-        metaStore.createIndex('dateTaken', 'date_taken');
-        metaStore.createIndex('location', ['location.lat', 'location.lon']);
-        metaStore.createIndex('tags', 'tags', { multiEntry: true });
-      }
-    },
-  });
-  
-  return db;
-};
+// openDB, IDBPDatabase, DB_NAME, DB_VERSION, STORE_NAME, DATA_STORE, META_STORE, db, initDB などの定義・importは全て削除
 
 // 統合データの保存
 export const saveAllData = async (data: StorageData): Promise<void> => {
-  const database = imageDB || await import('./imageDB').then(m => m.db);
+  let database = imageDB;
+  if (!database) database = await import('./imageDB').then(m => m.db);
+  if (!database) throw new Error('IndexedDBが初期化されていません');
   const oldData = await loadAllData();
 
   // 削除された画像を特定してDBから削除
@@ -68,7 +38,9 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
 // 統合データの読み込み
 export async function loadAllData(): Promise<StorageData> {
   try {
-    const database = imageDB || await import('./imageDB').then(m => m.db);
+    let database = imageDB;
+    if (!database) database = await import('./imageDB').then(m => m.db);
+    if (!database) throw new Error('IndexedDBが初期化されていません');
     const data = await database.get('data', 'storage_data');
     if (!data) {
       return { items: [], groups: [], tags: [] };
