@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, ArrowLeft, Check,  X, RotateCw, RotateCcw, Plus } from 'lucide-react';
 import { TagChip } from '../TagChip';
-import { PhotoItem, PostalItemGroup, PhotoMetadata, Location } from '../../types';
+import { PhotoItem, PostalItemGroup, PhotoMetadata, Location, Tag } from '../../types';
 import { runTesseractOcr } from '../../utils/ocr';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { resizeImageWithOrientation } from '../../utils/imageResize';
@@ -9,11 +9,18 @@ import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
 import init from '../../pkg/your_wasm_pkg';
 import EXIF from 'exif-js';
-import { usePostalTags } from '../../hooks/usePostalTags';
 
 interface UnifiedAddScreenProps {
   onSave: (data: PhotoItem | PostalItemGroup) => void;
   onBack: () => void;
+  availableTags: Tag[];
+  showAddTag: boolean;
+  setShowAddTag: (v: boolean) => void;
+  newTagName: string;
+  setNewTagName: (v: string) => void;
+  newTagColor: string;
+  setNewTagColor: (v: string) => void;
+  handleAddTag: () => void;
 }
 
 type OcrMode = 'disabled' | 'tesseract' | 'google-cloud';
@@ -23,18 +30,10 @@ interface PhotoItemWithRotation extends PhotoItem {
   rotation?: number; // 0, 90, 180, 270
 }
 
-export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBack }) => {
-  const {
-    tags,
-    showAddTag,
-    setShowAddTag,
-    newTagName,
-    setNewTagName,
-    newTagColor,
-    setNewTagColor,
-    handleAddTag
-  } = usePostalTags();
-
+export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
+  onSave, onBack, availableTags,
+  showAddTag, setShowAddTag, newTagName, setNewTagName, newTagColor, setNewTagColor, handleAddTag
+}) => {
   const [photos, setPhotos] = useState<PhotoItemWithRotation[]>([]);
   const [title, setTitle] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -807,7 +806,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
           <div className="flex flex-wrap gap-2 mb-4">
-            {tags.map((tag: { name: string; color: string }) => (
+            {availableTags.map((tag: { name: string; color: string }) => (
               <TagChip
                 key={tag.name}
                 tag={tag.name}

@@ -58,6 +58,14 @@ function App() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // App関数内でタグ編集UIのstate/操作を定義
+  const [showAddTag, setShowAddTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#3B82F6');
+  const [tagEditIdx, setTagEditIdx] = useState<number|null>(null);
+  const [tagEditName, setTagEditName] = useState('');
+  const [tagEditColor, setTagEditColor] = useState('#3B82F6');
+
   // 起動時にIndexedDBから全データをstateに反映
   useEffect(() => {
     loadAllData().then(data => {
@@ -295,6 +303,50 @@ function App() {
     }
   };
 
+  const handleAddTag = () => {
+    if (!newTagName.trim()) return;
+    const newTag = { name: newTagName.trim(), color: newTagColor };
+    const updated = [...tags, newTag];
+    setTags(updated);
+    setNewTagName('');
+    setNewTagColor('#3B82F6');
+    setShowAddTag(false);
+    saveAllData({ items, groups, tags: updated });
+  };
+
+  const startEditTag = (idx: number) => {
+    setTagEditIdx(idx);
+    setTagEditName(tags[idx].name);
+    setTagEditColor(tags[idx].color);
+  };
+
+  const handleEditTag = (idx: number|null, name: string, color: string) => {
+    if (idx === null || !name.trim()) return;
+    const updated = tags.map((t, i) => i === idx ? { name: name.trim(), color } : t);
+    setTags(updated);
+    setTagEditIdx(null);
+    setTagEditName('');
+    setTagEditColor('#3B82F6');
+    saveAllData({ items, groups, tags: updated });
+  };
+
+  const handleCancelEdit = () => {
+    setTagEditIdx(null);
+    setTagEditName('');
+    setTagEditColor('#3B82F6');
+  };
+
+  const handleRemoveTag = (idx: number) => {
+    if (!window.confirm('このタグを削除しますか？')) return;
+    const delName = tags[idx].name;
+    const updated = tags.filter((_, i) => i !== idx);
+    setTags(updated);
+    setTagEditIdx(null);
+    setTagEditName('');
+    setTagEditColor('#3B82F6');
+    saveAllData({ items, groups, tags: updated });
+  };
+
   const renderScreen = () => {
     switch (appState.screen.type) {
       case 'home':
@@ -315,6 +367,22 @@ function App() {
             getExportData={handleExport}
             onBulkDelete={handleBulkDelete}
             availableTags={tags}
+            showAddTag={showAddTag}
+            setShowAddTag={setShowAddTag}
+            newTagName={newTagName}
+            setNewTagName={setNewTagName}
+            newTagColor={newTagColor}
+            setNewTagColor={setNewTagColor}
+            tagEditIdx={tagEditIdx}
+            tagEditName={tagEditName}
+            setTagEditName={setTagEditName}
+            tagEditColor={tagEditColor}
+            setTagEditColor={setTagEditColor}
+            handleAddTag={handleAddTag}
+            startEditTag={startEditTag}
+            handleEditTag={handleEditTag}
+            handleCancelEdit={handleCancelEdit}
+            handleRemoveTag={handleRemoveTag}
           />
         );
 
@@ -323,6 +391,14 @@ function App() {
           <UnifiedAddScreen
             onSave={handleUnifiedAdd}
             onBack={() => navigateTo({ type: 'home' })}
+            availableTags={tags}
+            showAddTag={showAddTag}
+            setShowAddTag={setShowAddTag}
+            newTagName={newTagName}
+            setNewTagName={setNewTagName}
+            newTagColor={newTagColor}
+            setNewTagColor={setNewTagColor}
+            handleAddTag={handleAddTag}
           />
         );
 
@@ -355,6 +431,22 @@ function App() {
               await deleteGroup(group.id);
               navigateTo({ type: 'home' });
             }}
+            showAddTag={showAddTag}
+            setShowAddTag={setShowAddTag}
+            newTagName={newTagName}
+            setNewTagName={setNewTagName}
+            newTagColor={newTagColor}
+            setNewTagColor={setNewTagColor}
+            tagEditIdx={tagEditIdx}
+            tagEditName={tagEditName}
+            setTagEditName={setTagEditName}
+            tagEditColor={tagEditColor}
+            setTagEditColor={setTagEditColor}
+            handleAddTag={handleAddTag}
+            startEditTag={startEditTag}
+            handleEditTag={handleEditTag}
+            handleCancelEdit={handleCancelEdit}
+            handleRemoveTag={handleRemoveTag}
           />
         );
 

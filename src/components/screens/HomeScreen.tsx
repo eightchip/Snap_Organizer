@@ -5,7 +5,6 @@ import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
 import { Plus, Package, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image, Search } from 'lucide-react';
 // import { usePostalItems } from '../../hooks/usePostalItems';
-import { usePostalTags } from '../../hooks/usePostalTags';
 import { useSearch, SearchQuery } from '../../hooks/useSearch';
 import { MAX_TAGS } from '../../constants/tags';
 import QRcode from 'qrcode.react';
@@ -33,32 +32,24 @@ interface HomeScreenProps {
   getExportData: () => Promise<any>;
   onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
   availableTags: Tag[];
+  // タグ編集UI用props
+  showAddTag: boolean;
+  setShowAddTag: (v: boolean) => void;
+  newTagName: string;
+  setNewTagName: (v: string) => void;
+  newTagColor: string;
+  setNewTagColor: (v: string) => void;
+  tagEditIdx: number|null;
+  tagEditName: string;
+  setTagEditName: (v: string) => void;
+  tagEditColor: string;
+  setTagEditColor: (v: string) => void;
+  handleAddTag: () => void;
+  startEditTag: (idx: number) => void;
+  handleEditTag: (idx: number, name: string, color: string) => void;
+  handleCancelEdit: () => void;
+  handleRemoveTag: (idx: number) => void;
 }
-
-// usePostalTagsフックを拡張
-const usePostalTagsWithLimit = () => {
-  const postalTags = usePostalTags();
-  
-  // 元のhandleAddTagを上書き
-  const handleAddTagWithLimit = () => {
-    if (!postalTags.newTagName.trim()) return;
-    if (postalTags.tags.length >= MAX_TAGS) {
-      alert(`タグの最大数（${MAX_TAGS}個）に達しました。\n不要なタグを削除してから追加してください。`);
-      return;
-    }
-    const newTag = { name: postalTags.newTagName.trim(), color: postalTags.newTagColor };
-    const updated = [...postalTags.tags, newTag];
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
-    postalTags.setNewTagName('');
-    postalTags.setNewTagColor('#3B82F6');
-    postalTags.setShowAddTag(false);
-  };
-
-  return {
-    ...postalTags,
-    handleAddTag: handleAddTagWithLimit
-  };
-};
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   items,
@@ -76,31 +67,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   getExportData,
   onBulkDelete,
   availableTags,
+  // タグ編集UI用props
+  showAddTag,
+  setShowAddTag,
+  newTagName,
+  setNewTagName,
+  newTagColor,
+  setNewTagColor,
+  tagEditIdx,
+  tagEditName,
+  setTagEditName,
+  tagEditColor,
+  setTagEditColor,
+  handleAddTag,
+  startEditTag,
+  handleEditTag,
+  handleCancelEdit,
+  handleRemoveTag
 }) => {
-  const {
-    tags,
-    showAddTag,
-    setShowAddTag,
-    newTagName,
-    setNewTagName,
-    newTagColor,
-    setNewTagColor,
-    tagEditIdx,
-    tagEditName,
-    setTagEditName,
-    tagEditColor,
-    setTagEditColor,
-    handleAddTag,
-    startEditTag,
-    handleEditTag,
-    handleCancelEdit,
-    handleRemoveTag
-  } = usePostalTagsWithLimit();
-
-  // 日付範囲検索用state
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-
   const [showTagFilter, setShowTagFilter] = useState(false);
 
   const [showImportModal, setShowImportModal] = useState(false);
@@ -134,6 +118,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // 検索結果の状態管理
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [currentSearchMode, setCurrentSearchMode] = useState<'basic' | 'advanced'>('basic');
+
+  // 日付範囲検索用stateを宣言
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // 画像URLの読み込み
   useEffect(() => {
@@ -563,7 +551,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 placeholder="テキストやタグで検索..."
                 showAdvancedSearch={true}
                 isSearching={isSearching}
-                advancedTags={tags.map((tag: { name: string }) => tag.name)}
+                advancedTags={availableTags.map((tag: { name: string }) => tag.name)}
               />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -664,7 +652,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tags.map((tag: { name: string; color: string }, idx: number) => {
+          {availableTags.map((tag: { name: string; color: string }, idx: number) => {
             // タグ件数を計算
             const itemCount = items.filter(item => item.tags.includes(tag.name)).length;
             const groupPhotoCount = groups.reduce((acc, group) => acc + (group.photos ? group.photos.filter(photo => photo.tags.includes(tag.name)).length : 0), 0);
@@ -706,7 +694,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <button
               onClick={() => {
                 handleEditTag(tagEditIdx, tagEditName, tagEditColor);
-                onBulkTagRename(tags[tagEditIdx].name, tagEditName.trim());
+                onBulkTagRename(availableTags[tagEditIdx].name, tagEditName.trim());
               }}
               className="px-2 py-1 bg-blue-500 text-white rounded"
             >

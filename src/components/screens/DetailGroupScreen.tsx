@@ -18,6 +18,22 @@ interface DetailGroupScreenProps {
   onBack: () => void;
   onUpdate: (updates: Partial<PostalItemGroup>) => void;
   onDelete: () => void;
+  showAddTag: boolean;
+  setShowAddTag: (v: boolean) => void;
+  newTagName: string;
+  setNewTagName: (v: string) => void;
+  newTagColor: string;
+  setNewTagColor: (v: string) => void;
+  tagEditIdx: number|null;
+  tagEditName: string;
+  setTagEditName: (v: string) => void;
+  tagEditColor: string;
+  setTagEditColor: (v: string) => void;
+  handleAddTag: () => void;
+  startEditTag: (idx: number) => void;
+  handleEditTag: (idx: number, name: string, color: string) => void;
+  handleCancelEdit: () => void;
+  handleRemoveTag: (idx: number) => void;
 }
 
 // PhotoItemにrotationを持たせる
@@ -30,7 +46,23 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   availableTags,
   onBack,
   onUpdate,
-  onDelete
+  onDelete,
+  showAddTag,
+  setShowAddTag,
+  newTagName,
+  setNewTagName,
+  newTagColor,
+  setNewTagColor,
+  tagEditIdx,
+  tagEditName,
+  setTagEditName,
+  tagEditColor,
+  setTagEditColor,
+  handleAddTag,
+  startEditTag,
+  handleEditTag,
+  handleCancelEdit,
+  handleRemoveTag
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(group.title);
@@ -43,12 +75,6 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const [isNavigationModalOpen, setIsNavigationModalOpen] = useState(false);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
   const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
-  const [tagEditIdx, setTagEditIdx] = useState<number|null>(null);
-  const [tagEditName, setTagEditName] = useState('');
-  const [tagEditColor, setTagEditColor] = useState('#3B82F6');
-  const [showAddTag, setShowAddTag] = useState(false);
-  const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#3B82F6');
 
   useEffect(() => {
     (async () => {
@@ -266,41 +292,6 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     }
     return new File([u8arr], filename, { type: mime });
   }
-
-  // タグ追加
-  const handleAddTag = () => {
-    if (!newTagName.trim()) return;
-    const newTag = { name: newTagName.trim(), color: newTagColor };
-    const updated = [...availableTags, newTag];
-    setEditedTags(tags => [...tags, newTag.name]);
-    setNewTagName(''); setNewTagColor('#3B82F6'); setShowAddTag(false);
-  };
-  // タグ編集開始
-  const startEditTag = (idx: number) => {
-    setTagEditIdx(idx);
-    setTagEditName(availableTags[idx].name);
-    setTagEditColor(availableTags[idx].color);
-  };
-  // タグ編集保存
-  const handleEditTag = () => {
-    if (tagEditIdx === null || !tagEditName.trim()) return;
-    const oldName = availableTags[tagEditIdx].name;
-    const newName = tagEditName.trim();
-    const updated = availableTags.map((t, i) => i === tagEditIdx ? { name: newName, color: tagEditColor } : t);
-    setEditedTags(tags => tags.map(t => t === oldName ? newName : t));
-    setTagEditIdx(null); setTagEditName(''); setTagEditColor('#3B82F6');
-  };
-  // タグ編集キャンセル
-  const handleCancelEdit = () => {
-    setTagEditIdx(null); setTagEditName(''); setTagEditColor('#3B82F6');
-  };
-  // タグ削除
-  const handleRemoveTag = (idx: number) => {
-    if (!window.confirm('このタグを削除しますか？')) return;
-    const delName = availableTags[idx].name;
-    const updated = availableTags.filter((_, i) => i !== idx);
-    setEditedTags(tags => tags.filter(t => t !== delName));
-  };
 
   // ドラッグ&ドロップによる並び替え
   const handleDragEnd = (result: any) => {
@@ -530,7 +521,12 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
                 <div className="flex items-center gap-2 mb-2">
                   <input value={tagEditName} onChange={e => setTagEditName(e.target.value)} className="border p-1 rounded w-24" />
                   <input type="color" value={tagEditColor} onChange={e => setTagEditColor(e.target.value)} className="w-8 h-8 p-0 border-none" />
-                  <button onClick={handleEditTag} className="px-2 py-1 bg-blue-500 text-white rounded">保存</button>
+                  <button
+                    onClick={() => handleEditTag(tagEditIdx, tagEditName, tagEditColor)}
+                    className="px-2 py-1 bg-blue-500 text-white rounded"
+                  >
+                    保存
+                  </button>
                   <button onClick={handleCancelEdit} className="px-2 py-1 bg-gray-200 rounded">キャンセル</button>
                 </div>
               ) : null}
