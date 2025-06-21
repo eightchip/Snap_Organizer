@@ -1,6 +1,6 @@
-import QRCode from 'qrcode';
-import pako from 'pako';
-import { loadImageBlob } from './imageDB';
+// import QRCode from 'qrcode';
+// import pako from 'pako';
+// import { loadImageBlob } from './imageDB';
 
 export interface SyncData {
   version: string;
@@ -28,64 +28,49 @@ export interface DeviceInfo {
   dataVersion: string;
 }
 
-interface CompressedSyncData {
-  v: string;      // version
-  ts: number;     // timestamp
-  did: string;    // deviceId
-  d: {           // data
-    i: Array<{   // items
-      i: string; // id
-      t: string[]; // tags
-      m: string; // memo
-      c: number; // createdAt
-      u: number; // updatedAt
-    }>;
-    g: Array<{   // groups
-      i: string; // id
-      t: string; // title
-      g: string[]; // tags
-      m: string; // memo
-      c: number; // createdAt
-      u: number; // updatedAt
-      p: Array<{ // photos
-        i: string; // id
-        t: string[]; // tags
-        m: string; // memo
-      }>;
-    }>;
-    t: any[];    // tags
-  };
-  c: string;     // checksum
-}
+// interface CompressedSyncData {
+//   v: string;      // version
+//   ts: number;     // timestamp
+//   did: string;    // deviceId
+//   d: {           // data
+//     i: Array<{   // items
+//       i: string; // id
+//       t: string[]; // tags
+//       m: string; // memo
+//       c: number; // createdAt
+//       u: number; // updatedAt
+//     }>;
+//     g: Array<{   // groups
+//       i: string; // id
+//       t: string; // title
+//       g: string[]; // tags
+//       m: string; // memo
+//       c: number; // createdAt
+//       u: number; // updatedAt
+//       p: Array<{ // photos
+//         i: string; // id
+//         t: string[]; // tags
+//         m: string; // memo
+//       }>;
+//     }>;
+//     t: any[];    // tags
+//   };
+//   c: string;     // checksum
+// }
 
-interface ChunkData {
-  t: 'c';        // type: chunk
-  n: number;     // total number
-  i: number;     // index
-  d: string;     // data
-  h: string;     // hash
-}
+// interface ChunkData {
+//   t: 'c';        // type: chunk
+//   n: number;     // total number
+//   i: number;     // index
+//   d: string;     // data
+//   h: string;     // hash
+// }
 
 export class SyncManager {
-  private deviceId: string;
   private deviceName: string;
-  private readonly MAX_QR_SIZE = 300; // QRコードの最大サイズを300バイトに縮小
-  private readonly CHUNK_HEADER_SIZE = 30; // チャンクヘッダーのサイズを最適化
-  private readonly MAX_QR_CHUNKS = 8; // 最大分割数を8に増加
 
   constructor() {
-    this.deviceId = this.getOrCreateDeviceId();
     this.deviceName = this.getDeviceName();
-  }
-
-  // デバイスIDの生成・取得
-  private getOrCreateDeviceId(): string {
-    let deviceId = localStorage.getItem('device_id');
-    if (!deviceId) {
-      deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('device_id', deviceId);
-    }
-    return deviceId;
   }
 
   // デバイス名の取得
@@ -98,16 +83,6 @@ export class SyncManager {
     localStorage.setItem('device_name', defaultName);
     return defaultName;
   }
-
-  // Blob→base64変換ユーティリティ（App.tsx等にあればimport、なければ下記を追加）
-  private blobToBase64 = async (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
 
   // メールバックアップの生成
   async generateEmailBackup(syncData: SyncData): Promise<{

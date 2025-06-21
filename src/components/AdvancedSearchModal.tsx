@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SearchQuery } from '../hooks/useSearch';
-import { Calendar, Search, X, Filter, Clock, Tag, MapPin, FileText, StickyNote } from 'lucide-react';
+import { Calendar, Search, X, Clock, Tag, MapPin, FileText, StickyNote } from 'lucide-react';
 
 interface AdvancedSearchModalProps {
   isOpen: boolean;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, X, Filter, Sparkles } from 'lucide-react';
+import { Search, X, Filter } from 'lucide-react';
 import AdvancedSearchModal from './AdvancedSearchModal';
 import { SearchQuery } from '../hooks/useSearch';
 

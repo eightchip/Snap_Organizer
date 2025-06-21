@@ -1,16 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { DEFAULT_TAGS } from '../constants/tags';
 
 interface Tag {
   name: string;
   color: string;
 }
-
-const COLOR_PALETTE = [
-  { name: '仕事', color: '#3B82F6' },
-  { name: '趣味', color: '#22C55E' },
-  { name: '旅行', color: '#A78BFA' },
-];
 
 export const usePostalTags = () => {
   const [tags, setTags] = useState(() => {
