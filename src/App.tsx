@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Screen, AppState, PostalItemGroup, PhotoItem } from './types';
 import { usePostalItems } from './hooks/usePostalItems';
 import { HomeScreen } from './components/screens/HomeScreen';
@@ -65,6 +65,17 @@ function App() {
   const setTags = (tags: any) => {
     localStorage.setItem('postal_tags', JSON.stringify(tags));
   };
+
+  // 追加: 初期化時にIndexedDBから全データをstateに反映
+  useEffect(() => {
+    loadAllData().then(data => {
+      setItems(data.items || []);
+      setGroups(data.groups || []);
+      setTags(data.tags || []);
+      // localStorageも同期
+      localStorage.setItem('postal_tags', JSON.stringify(data.tags || []));
+    });
+  }, []);
 
   // インポート
   const handleImport = async (jsonData: any) => {
