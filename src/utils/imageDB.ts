@@ -113,4 +113,6 @@ export const loadAppIconFromDB = async (): Promise<Blob | null> => {
 // カスタムアイコンをIndexedDBから削除
 export const deleteAppIconFromDB = async (): Promise<void> => {
   await deleteImageBlob('app_icon');
-}; 
+};
+
+export { initDB }; 

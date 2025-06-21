@@ -1,13 +1,11 @@
 import { StorageData } from '../types';
-import { db as imageDB, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB } from './imageDB';
+import { initDB, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB } from './imageDB';
 
 // openDB, IDBPDatabase, DB_NAME, DB_VERSION, STORE_NAME, DATA_STORE, META_STORE, db, initDB などの定義・importは全て削除
 
 // 統合データの保存
 export const saveAllData = async (data: StorageData): Promise<void> => {
-  let database = imageDB;
-  if (!database) database = await import('./imageDB').then(m => m.db);
-  if (!database) throw new Error('IndexedDBが初期化されていません');
+  const database = await initDB();
   const oldData = await loadAllData();
 
   // 削除された画像を特定してDBから削除
@@ -38,9 +36,7 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
 // 統合データの読み込み
 export async function loadAllData(): Promise<StorageData> {
   try {
-    let database = imageDB;
-    if (!database) database = await import('./imageDB').then(m => m.db);
-    if (!database) throw new Error('IndexedDBが初期化されていません');
+    const database = await initDB();
     const data = await database.get('data', 'storage_data');
     if (!data) {
       return { items: [], groups: [], tags: [] };
