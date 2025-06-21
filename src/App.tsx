@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Screen, AppState, PostalItemGroup, PhotoItem } from './types';
 import { usePostalItems } from './hooks/usePostalItems';
 import { HomeScreen } from './components/screens/HomeScreen';
@@ -93,19 +93,31 @@ function App() {
         });
       };
 
+      let fixedItems: any[] = [];
+      let fixedGroups: any[] = [];
+      let fixedTags: any[] = [];
       if (data.items) {
-        const fixedItems = await fixDatesAndImages(data.items);
-        for (const item of fixedItems) {
-          await addItem(item);
-        }
+        fixedItems = await fixDatesAndImages(data.items);
+        setItems(fixedItems);
       }
       if (data.groups) {
-        const fixedGroups = await fixDatesAndImages(data.groups);
-        for (const group of fixedGroups) {
-          await addGroup(group);
-        }
+        fixedGroups = await fixDatesAndImages(data.groups);
+        setGroups(fixedGroups);
       }
-      if (data.tags) setTags(data.tags);
+      if (data.tags) {
+        fixedTags = data.tags;
+        setTags(fixedTags);
+      } else {
+        // タグがない場合は空配列
+        fixedTags = [];
+      }
+
+      // すべてのデータをIndexedDBに永続化
+      await saveAllData({
+        items: fixedItems,
+        groups: fixedGroups,
+        tags: fixedTags
+      });
 
       alert('データをインポートしました');
     } catch (error: any) {
@@ -303,7 +315,6 @@ function App() {
             onExport={handleDownloadExport}
             getExportData={handleExport}
             onBulkDelete={handleBulkDelete}
-            onSync={() => navigateTo({ type: 'sync' })}
           />
         );
 
