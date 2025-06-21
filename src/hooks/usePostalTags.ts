@@ -16,21 +16,11 @@ export const usePostalTags = () => {
   const [tags, setTags] = useState(() => {
     const saved = localStorage.getItem('postal_tags');
     if (saved) {
-      const existingTags = JSON.parse(saved);
-      // 既存のタグ名を取得
-      const existingTagNames = new Set(existingTags.map((t: { name: string }) => t.name));
-      
-      // DEFAULT_TAGSから重複していないタグを抽出
-      const newDefaultTags = DEFAULT_TAGS.filter(tag => !existingTagNames.has(tag.name));
-      
-      // 既存のタグと新しいデフォルトタグを結合
-      const mergedTags = [...existingTags, ...newDefaultTags];
-      
-      // 更新されたタグリストを保存
-      localStorage.setItem('postal_tags', JSON.stringify(mergedTags));
-      
-      return mergedTags;
+      // 既存のタグのみを使う（DEFAULT_TAGSはマージしない）
+      return JSON.parse(saved);
     }
+    // 初回のみDEFAULT_TAGSをセット
+    localStorage.setItem('postal_tags', JSON.stringify(DEFAULT_TAGS));
     return DEFAULT_TAGS;
   });
 
@@ -63,7 +53,7 @@ export const usePostalTags = () => {
   // タグ編集保存
   const handleEditTag = () => {
     if (tagEditIdx === null || !tagEditName.trim()) return;
-    const updated = tags.map((t, i) => 
+    const updated = tags.map((t: Tag, i: number) => 
       i === tagEditIdx ? { name: tagEditName.trim(), color: tagEditColor } : t
     );
     setTags(updated);
@@ -83,7 +73,7 @@ export const usePostalTags = () => {
   // タグ削除
   const handleRemoveTag = (idx: number) => {
     if (!window.confirm('このタグを削除しますか？')) return;
-    const updated = tags.filter((_, i) => i !== idx);
+    const updated = tags.filter((_: Tag, i: number) => i !== idx);
     setTags(updated);
     localStorage.setItem('postal_tags', JSON.stringify(updated));
   };
