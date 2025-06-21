@@ -10,6 +10,7 @@ interface SearchBarProps {
   placeholder?: string;
   showAdvancedSearch?: boolean;
   isSearching?: boolean;
+  advancedTags?: string[];
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
@@ -19,6 +20,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   placeholder = 'テキストやタグで検索...',
   showAdvancedSearch = true,
   isSearching = false,
+  advancedTags,
 }) => {
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
 
@@ -72,6 +74,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           onClose={() => setIsAdvancedSearchOpen(false)}
           onSearch={handleAdvancedSearch}
           isSearching={isSearching}
+          availableTags={advancedTags}
         />
       )}
     </>

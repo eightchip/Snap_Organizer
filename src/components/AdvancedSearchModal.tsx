@@ -7,6 +7,7 @@ interface AdvancedSearchModalProps {
   onClose: () => void;
   onSearch: (query: SearchQuery) => void;
   isSearching: boolean;
+  availableTags?: string[];
 }
 
 const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
@@ -14,6 +15,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
   onClose,
   onSearch,
   isSearching,
+  availableTags = [],
 }) => {
   const [query, setQuery] = useState('');
   const [selectedFields, setSelectedFields] = useState<string[]>(['ocr_text', 'memo', 'tags']);
@@ -169,7 +171,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
             タグフィルター
           </label>
           <div className="flex flex-wrap gap-2">
-            {['仕事', '趣味', '旅行', '郵便物', '重要', '緊急'].map((tag) => (
+            {availableTags.map((tag) => (
               <button
                 key={tag}
                 onClick={() => handleTagToggle(tag)}

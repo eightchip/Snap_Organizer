@@ -405,7 +405,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const handleShareViaEmail = async () => {
     const exportData = await getExportData();
-    const syncData = await syncManager.prepareSyncData(exportData.items, exportData.groups, exportData.tags);
+    // Construct SyncData inline (prepareSyncData does not exist)
+    const version = '1.0';
+    const timestamp = Date.now();
+    // Get deviceId using the same logic as SyncManager
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+      deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('device_id', deviceId);
+    }
+    const data = {
+      items: exportData.items,
+      groups: exportData.groups,
+      tags: exportData.tags,
+    };
+    // Calculate checksum (copy logic from calculateChecksum)
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(JSON.stringify(data));
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const checksum = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const syncData = { version, timestamp, deviceId, data, checksum };
     const emailContent = await syncManager.generateEmailBackup(syncData);
     
     await shareDataViaEmail(
@@ -574,6 +594,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 placeholder="テキストやタグで検索..."
                 showAdvancedSearch={true}
                 isSearching={isSearching}
+                advancedTags={tags.map(tag => tag.name)}
               />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
