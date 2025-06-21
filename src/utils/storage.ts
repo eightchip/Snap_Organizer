@@ -3,7 +3,7 @@ import { deleteImageBlob } from './imageDB';
 import { openDB, IDBPDatabase } from 'idb';
 
 const DB_NAME = 'postal_snap_db';
-const DB_VERSION = 2;
+const DB_VERSION = 4;
 const STORE_NAME = 'images';
 const DATA_STORE = 'app_data';
 const META_STORE = 'metadata';
