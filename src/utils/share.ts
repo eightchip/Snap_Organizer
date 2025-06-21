@@ -1,4 +1,5 @@
 import { PhotoItem, PostalItemGroup } from '../types';
+import { loadImageBlob } from './imageDB';
 
 /**
  * Web Share APIのサポート状況をチェック
@@ -45,11 +46,13 @@ const createGroupShareableText = (group: PostalItemGroup): string => {
  */
 export const shareItem = async (item: PhotoItem): Promise<boolean> => {
   try {
+    const blob = await loadImageBlob(item.image);
+    if (!blob || blob.size === 0) throw new Error('画像データが取得できません');
     const shareData = {
       title: '郵便物スナップ',
       text: createShareableText(item),
       files: [
-        new File([await fetch(item.image).then(r => r.blob())], 'postal-snap.jpg', {
+        new File([blob], 'postal-snap.jpg', {
           type: 'image/jpeg',
         }),
       ],
@@ -73,17 +76,17 @@ export const shareItem = async (item: PhotoItem): Promise<boolean> => {
  */
 export const shareGroup = async (group: PostalItemGroup): Promise<boolean> => {
   try {
+    const files = [];
+    for (const photo of group.photos) {
+      const blob = await loadImageBlob(photo.image);
+      if (blob && blob.size > 0) {
+        files.push(new File([blob], `postal-snap-${photo.id}.jpg`, { type: 'image/jpeg' }));
+      }
+    }
     const shareData = {
       title: '郵便物スナップ - グループ',
       text: createGroupShareableText(group),
-      files: await Promise.all(
-        group.photos.map(async (photo) => {
-          const blob = await fetch(photo.image).then(r => r.blob());
-          return new File([blob], `postal-snap-${photo.id}.jpg`, {
-            type: 'image/jpeg',
-          });
-        })
-      ),
+      files,
     };
 
     if (navigator.canShare && navigator.canShare(shareData)) {
