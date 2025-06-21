@@ -695,22 +695,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tags.map((tag, idx) => (
-            <div key={tag.name} className="flex items-center gap-1">
-              <TagChip
-                tag={tag.name}
-                selected={selectedTags.includes(tag.name)}
-                onClick={() => onTagToggle(tag.name)}
-                style={{ backgroundColor: tag.color + '22', color: tag.color }}
-              />
-              <button onClick={() => startEditTag(idx)} className="p-1 hover:bg-gray-100 rounded">
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button onClick={() => handleRemoveTag(idx)} className="p-1 hover:bg-red-100 rounded">
-                <Trash2 className="h-4 w-4 text-red-500" />
-              </button>
-            </div>
-          ))}
+          {tags.map((tag, idx) => {
+            // タグ件数を計算
+            const itemCount = items.filter(item => item.tags.includes(tag.name)).length;
+            const groupPhotoCount = groups.reduce((acc, group) => acc + (group.photos ? group.photos.filter(photo => photo.tags.includes(tag.name)).length : 0), 0);
+            const groupCount = groups.filter(group => group.tags && group.tags.includes(tag.name)).length;
+            const totalCount = itemCount + groupPhotoCount + groupCount;
+            return (
+              <div key={tag.name} className="flex items-center gap-1">
+                <TagChip
+                  tag={tag.name}
+                  selected={selectedTags.includes(tag.name)}
+                  onClick={() => onTagToggle(tag.name)}
+                  style={{ backgroundColor: tag.color + '22', color: tag.color }}
+                />
+                <span className="text-xs text-gray-500 ml-0.5">{totalCount}</span>
+                <button onClick={() => startEditTag(idx)} className="p-1 hover:bg-gray-100 rounded">
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button onClick={() => handleRemoveTag(idx)} className="p-1 hover:bg-red-100 rounded">
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         {tagEditIdx !== null && (
