@@ -15,11 +15,6 @@ interface DetailScreenProps {
   onDelete?: () => void;
 }
 
-// PhotoItemにrotationを持たせる
-interface PhotoItemWithRotation extends PhotoItem {
-  rotation?: number; // 0, 90, 180, 270
-}
-
 const getTagColor = (tagName: string) => {
   const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
   const found = tags.find((t: any) => t.name === tagName);
@@ -57,6 +52,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   });
   const [imageUrl, setImageUrl] = useState<string>('');
   const [rotation, setRotation] = useState<number>(0);
+  const [speechLang, setSpeechLang] = useState('ja-JP');
 
   // タグリストを更新
   useEffect(() => {
@@ -194,7 +190,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
     }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = 'ja-JP';
+    recognition.lang = speechLang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -472,6 +468,21 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
           onClose={() => setIsNavigationModalOpen(false)}
         />
       )}
+
+      {/* UIに言語選択ドロップダウンを追加（音声入力ボタン付近など適切な場所に） */}
+      <select
+        value={speechLang}
+        onChange={e => setSpeechLang(e.target.value)}
+        className="border rounded p-1 ml-2"
+        title="音声認識の言語を選択"
+      >
+        <option value="ja-JP">日本語</option>
+        <option value="en-US">English (US)</option>
+        <option value="zh-CN">中文 (中国語)</option>
+        <option value="ko-KR">한국어 (韓国語)</option>
+        <option value="fr-FR">Français</option>
+        <option value="de-DE">Deutsch</option>
+      </select>
     </>
   );
 };

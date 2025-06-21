@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Loader2, ArrowLeft, Check, Mic, MicOff, X, Info, RotateCw, RotateCcw, Plus } from 'lucide-react';
+import { Camera, Upload, ArrowLeft, Check,  X, RotateCw, RotateCcw, Plus } from 'lucide-react';
 import { TagChip } from '../TagChip';
 import { PhotoItem, PostalItemGroup, PhotoMetadata, Location } from '../../types';
-import { imageToDataURL, runTesseractOcr, runGoogleCloudOcr } from '../../utils/ocr';
+import { runTesseractOcr } from '../../utils/ocr';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
-import { resizeImage, resizeImageWithOrientation } from '../../utils/imageResize';
+import { resizeImageWithOrientation } from '../../utils/imageResize';
 import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
-import init, { preprocess_image_color } from '../../pkg/your_wasm_pkg';
+import init from '../../pkg/your_wasm_pkg';
 import EXIF from 'exif-js';
 import { usePostalTags } from '../../hooks/usePostalTags';
 
@@ -45,9 +45,9 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showSaved, setShowSaved] = useState(false);
   const [ocrMode, setOcrMode] = useState<OcrMode>('disabled');
-  const [useCloudOcr, setUseCloudOcr] = useState(false);
+  // const [useCloudOcr, setUseCloudOcr] = useState(false);
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
-  const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
+  // const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
   const [isProcessingLock, setIsProcessingLock] = useState(false);
@@ -387,7 +387,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         const exifDate = EXIF.getTag(this, 'DateTimeOriginal');
         if (exifDate) {
           // Convert EXIF date format to ISO string
-          const [date, time] = exifDate.split(' ');
+          const [date] = exifDate.split(' ');
           const [year, month, day] = date.split(':');
           resolve(`${year}-${month}-${day}`);
         } else {
@@ -478,7 +478,11 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
       ));
     } catch (error) {
       console.error('OCR error:', error);
-      setSaveError(`OCR処理中にエラーが発生しました: ${error.message}`);
+      setSaveError(
+        error instanceof Error
+          ? `OCR処理中にエラーが発生しました: ${error.message}`
+          : 'OCR処理中にエラーが発生しました'
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -803,7 +807,7 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({ onSave, onBa
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">タグ</h2>
           <div className="flex flex-wrap gap-2 mb-4">
-            {tags.map(tag => (
+            {tags.map((tag: { name: string; color: string }) => (
               <TagChip
                 key={tag.name}
                 tag={tag.name}
