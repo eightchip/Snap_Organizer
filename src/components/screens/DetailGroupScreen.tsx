@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PostalItemGroup, PhotoItem, Location } from '../../types';
+import { PostalItemGroup, PhotoItem, Tag, Location } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin, GripVertical, Navigation } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
@@ -14,6 +14,7 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 interface DetailGroupScreenProps {
   group: PostalItemGroup;
+  availableTags: Tag[];
   onBack: () => void;
   onUpdate: (updates: Partial<PostalItemGroup>) => void;
   onDelete: () => void;
@@ -26,6 +27,7 @@ interface PhotoItemWithRotation extends PhotoItem {
 
 export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   group,
+  availableTags,
   onBack,
   onUpdate,
   onDelete
@@ -39,10 +41,6 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const [isSharing, setIsSharing] = useState(false);
   const [isLocationEditorOpen, setIsLocationEditorOpen] = useState(false);
   const [isNavigationModalOpen, setIsNavigationModalOpen] = useState(false);
-  const [availableTags, setAvailableTags] = useState(() => {
-    const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : [];
-  });
   const [imageUrlMap, setImageUrlMap] = useState<Record<string, string>>({});
   const [rotatedImageUrlMap, setRotatedImageUrlMap] = useState<Record<string, string>>({});
   const [tagEditIdx, setTagEditIdx] = useState<number|null>(null);
@@ -51,14 +49,6 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#3B82F6');
-
-  // タグリストを更新
-  useEffect(() => {
-    const saved = localStorage.getItem('postal_tags');
-    if (saved) {
-      setAvailableTags(JSON.parse(saved));
-    }
-  }, [isEditing]);
 
   useEffect(() => {
     (async () => {
@@ -282,8 +272,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     if (!newTagName.trim()) return;
     const newTag = { name: newTagName.trim(), color: newTagColor };
     const updated = [...availableTags, newTag];
-    setAvailableTags(updated);
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
+    setEditedTags(tags => [...tags, newTag.name]);
     setNewTagName(''); setNewTagColor('#3B82F6'); setShowAddTag(false);
   };
   // タグ編集開始
@@ -298,9 +287,6 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     const oldName = availableTags[tagEditIdx].name;
     const newName = tagEditName.trim();
     const updated = availableTags.map((t, i) => i === tagEditIdx ? { name: newName, color: tagEditColor } : t);
-    setAvailableTags(updated);
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
-    // タグ名リネームを反映
     setEditedTags(tags => tags.map(t => t === oldName ? newName : t));
     setTagEditIdx(null); setTagEditName(''); setTagEditColor('#3B82F6');
   };
@@ -313,8 +299,6 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     if (!window.confirm('このタグを削除しますか？')) return;
     const delName = availableTags[idx].name;
     const updated = availableTags.filter((_, i) => i !== idx);
-    setAvailableTags(updated);
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
     setEditedTags(tags => tags.filter(t => t !== delName));
   };
 
@@ -436,7 +420,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
           </div>
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="photos" direction="horizontal">
-              {(provided) => (
+              {(provided: any) => (
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
@@ -450,7 +434,7 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
                       index={index}
                       isDragDisabled={!isEditing}
                     >
-                      {(provided, snapshot) => (
+                      {(provided: any, snapshot: any) => (
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}

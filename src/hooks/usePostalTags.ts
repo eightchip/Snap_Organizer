@@ -15,10 +15,8 @@ export const usePostalTags = () => {
     loadAllData().then(data => {
       if (data.tags && data.tags.length > 0) {
         setTags(data.tags);
-        localStorage.setItem('postal_tags', JSON.stringify(data.tags));
       } else {
         setTags(DEFAULT_TAGS);
-        localStorage.setItem('postal_tags', JSON.stringify(DEFAULT_TAGS));
         // 初回のみ保存
         saveAllData({ ...data, tags: DEFAULT_TAGS });
       }
@@ -38,7 +36,6 @@ export const usePostalTags = () => {
     const updated = [...(data.tags || []), newTag];
     await saveAllData({ ...data, tags: updated });
     setTags(updated);
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
   };
 
   // タグ編集開始
@@ -56,7 +53,6 @@ export const usePostalTags = () => {
     );
     await saveAllData({ ...data, tags: updated });
     setTags(updated);
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
   };
 
   // タグ編集キャンセル
@@ -72,7 +68,6 @@ export const usePostalTags = () => {
     const updated = (data.tags || []).filter((_: Tag, i: number) => i !== idx);
     await saveAllData({ ...data, tags: updated });
     setTags(updated);
-    localStorage.setItem('postal_tags', JSON.stringify(updated));
   };
 
   return {

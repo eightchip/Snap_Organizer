@@ -1,16 +1,17 @@
 import React from 'react';
-import { PostalItem, PostalItemGroup } from '../types';
+import { PhotoItem, PostalItemGroup, Tag } from '../types';
 import { TagChip } from './TagChip';
 import { Calendar, FileText, Image } from 'lucide-react';
 
 interface ItemCardProps {
-  item?: PostalItem;
+  item?: PhotoItem;
   group?: PostalItemGroup;
   onClick: () => void;
   imageUrl?: string;
+  availableTags: Tag[];
 }
 
-export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageUrl }) => {
+export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageUrl, availableTags }) => {
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('ja-JP', {
       year: 'numeric',
@@ -27,9 +28,8 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageU
     return text.slice(0, maxLength) + '...';
   };
 
-  const getTagColor = (tagName: string) => {
-    const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
-    const found = tags.find((t: any) => t.name === tagName);
+  const getTagColor = (tagName: string, availableTags: Tag[]) => {
+    const found = availableTags.find((t: any) => t.name === tagName);
     return found ? found.color : '#ccc';
   };
 
@@ -71,7 +71,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageU
           {item.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {item.tags.map((tag) => (
-                <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }} />
+                <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag, availableTags) + '22', color: getTagColor(tag, availableTags) }} />
               ))}
             </div>
           )}
@@ -117,7 +117,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageU
           {group.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {group.tags.map((tag) => (
-                <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag) + '22', color: getTagColor(tag) }} />
+                <TagChip key={tag} tag={tag} style={{ backgroundColor: getTagColor(tag, availableTags) + '22', color: getTagColor(tag, availableTags) }} />
               ))}
             </div>
           )}

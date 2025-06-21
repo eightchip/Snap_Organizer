@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { PhotoItem, PostalItemGroup } from '../../types';
+import { PhotoItem, PostalItemGroup, Tag } from '../../types';
 import { SearchBar } from '../SearchBar';
 import { TagChip } from '../TagChip';
 import { ItemCard } from '../ItemCard';
@@ -32,6 +32,7 @@ interface HomeScreenProps {
   onExport: () => void;
   getExportData: () => Promise<any>;
   onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
+  availableTags: Tag[];
 }
 
 // usePostalTagsフックを拡張
@@ -74,6 +75,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onExport,
   getExportData,
   onBulkDelete,
+  availableTags,
 }) => {
   const {
     tags,
@@ -703,7 +705,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             />
             <button
               onClick={() => {
-                handleEditTag();
+                handleEditTag(tagEditIdx, tagEditName, tagEditColor);
                 onBulkTagRename(tags[tagEditIdx].name, tagEditName.trim());
               }}
               className="px-2 py-1 bg-blue-500 text-white rounded"
@@ -840,6 +842,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   item={item}
                   onClick={isSelectionMode ? () => handleToggleSelection(item.id, 'item') : () => onItemClick(item.id)}
                   imageUrl={imageUrlMap[item.image]}
+                  availableTags={availableTags}
                 />
               </div>
             ))}
@@ -861,6 +864,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   group={group}
                   onClick={isSelectionMode ? () => handleToggleSelection(group.id, 'group') : () => onGroupClick(group.id)}
                   imageUrl={group.photos[0] ? imageUrlMap[group.photos[0].image] : undefined}
+                  availableTags={availableTags}
                 />
               </div>
             ))}

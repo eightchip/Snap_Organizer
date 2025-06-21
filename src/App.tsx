@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Screen, AppState, PostalItemGroup, PhotoItem } from './types';
+import { Screen, AppState, PostalItemGroup, PhotoItem, Tag } from './types';
 import { usePostalItems } from './hooks/usePostalItems';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { UnifiedAddScreen } from './components/screens/UnifiedAddScreen';
@@ -50,6 +50,7 @@ function App() {
   // 検索とタグフィルター用の状態
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]); // タグもグローバルstateで管理
 
   const [appState, setAppState] = useState<AppState>({
     screen: { type: 'home' }
@@ -57,23 +58,12 @@ function App() {
 
   const [error, setError] = useState<string | null>(null);
 
-  // タグ情報もlocalStorageから取得
-  const getTags = () => {
-    const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : [];
-  };
-  const setTags = (tags: any) => {
-    localStorage.setItem('postal_tags', JSON.stringify(tags));
-  };
-
-  // 追加: 初期化時にIndexedDBから全データをstateに反映
+  // 起動時にIndexedDBから全データをstateに反映
   useEffect(() => {
     loadAllData().then(data => {
       setItems(data.items || []);
       setGroups(data.groups || []);
       setTags(data.tags || []);
-      // localStorageも同期
-      localStorage.setItem('postal_tags', JSON.stringify(data.tags || []));
     });
   }, []);
 
@@ -106,7 +96,7 @@ function App() {
 
       let fixedItems: any[] = [];
       let fixedGroups: any[] = [];
-      let fixedTags: any[] = [];
+      let fixedTags: Tag[] = [];
       if (data.items) {
         fixedItems = await fixDatesAndImages(data.items);
         setItems(fixedItems);
@@ -119,11 +109,9 @@ function App() {
         fixedTags = data.tags;
         setTags(fixedTags);
       } else {
-        // タグがない場合は空配列
         fixedTags = [];
       }
 
-      // すべてのデータをIndexedDBに永続化
       await saveAllData({
         items: fixedItems,
         groups: fixedGroups,
@@ -139,7 +127,7 @@ function App() {
 
   // エクスポート
   const handleExport = async () => {
-    const data = { items, groups, tags: getTags() };
+    const data = { items, groups, tags };
     
     const itemsWithImageData = await Promise.all(
       (data.items || []).map(async item => {
@@ -326,6 +314,7 @@ function App() {
             onExport={handleDownloadExport}
             getExportData={handleExport}
             onBulkDelete={handleBulkDelete}
+            availableTags={tags}
           />
         );
 
@@ -343,6 +332,7 @@ function App() {
         return (
           <DetailScreen
             item={item}
+            availableTags={tags}
             onBack={() => navigateTo({ type: 'home' })}
             onUpdate={(updates) => handleUpdateItem(item.id, updates)}
             onDelete={async () => {
@@ -358,6 +348,7 @@ function App() {
         return (
           <DetailGroupScreen
             group={group}
+            availableTags={tags}
             onBack={() => navigateTo({ type: 'home' })}
             onUpdate={(updates) => updateGroup(group.id, updates)}
             onDelete={async () => {
@@ -372,7 +363,7 @@ function App() {
           <SyncScreen
             items={items}
             groups={groups}
-            tags={getTags()}
+            tags={tags}
             onBack={() => navigateTo({ type: 'home' })}
             onImport={handleImport}
           />

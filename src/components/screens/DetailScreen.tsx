@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PhotoItem, Location } from '../../types';
+import { PhotoItem, Location, Tag } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Calendar, FileText, StickyNote, Mic, MicOff, Share2, RotateCw, RotateCcw, MapPin, Navigation } from 'lucide-react';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
@@ -10,14 +10,14 @@ import NavigationModal from '../NavigationModal';
 
 interface DetailScreenProps {
   item: PhotoItem;
+  availableTags: Tag[];
   onBack: () => void;
   onUpdate: (updates: Partial<PhotoItem>) => void;
   onDelete?: () => void;
 }
 
-const getTagColor = (tagName: string) => {
-  const tags = JSON.parse(localStorage.getItem('postal_tags') || '[]');
-  const found = tags.find((t: any) => t.name === tagName);
+const getTagColor = (tagName: string, availableTags: Tag[]) => {
+  const found = availableTags.find((t: any) => t.name === tagName);
   return found ? found.color : '#ccc';
 };
 
@@ -33,6 +33,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 
 export const DetailScreen: React.FC<DetailScreenProps> = ({
   item,
+  availableTags,
   onBack,
   onUpdate,
   onDelete
@@ -46,21 +47,9 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
   const [isSharing, setIsSharing] = useState(false);
   const [isLocationEditorOpen, setIsLocationEditorOpen] = useState(false);
   const [isNavigationModalOpen, setIsNavigationModalOpen] = useState(false);
-  const [availableTags, setAvailableTags] = useState(() => {
-    const saved = localStorage.getItem('postal_tags');
-    return saved ? JSON.parse(saved) : [];
-  });
   const [imageUrl, setImageUrl] = useState<string>('');
   const [rotation, setRotation] = useState<number>(0);
   const [speechLang, setSpeechLang] = useState('ja-JP');
-
-  // タグリストを更新
-  useEffect(() => {
-    const saved = localStorage.getItem('postal_tags');
-    if (saved) {
-      setAvailableTags(JSON.parse(saved));
-    }
-  }, [isEditing]);
 
   useEffect(() => {
     if (item.image) {
@@ -347,7 +336,7 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
                     />
                   ))
                 : item.tags.map(tag => (
-                    <TagChip key={tag} tag={tag} color={getTagColor(tag)} />
+                    <TagChip key={tag} tag={tag} color={getTagColor(tag, availableTags)} />
                   ))}
             </div>
           </div>
