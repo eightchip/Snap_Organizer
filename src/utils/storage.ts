@@ -1,6 +1,5 @@
 import { PhotoItem, PostalItemGroup, StorageData } from '../types';
-import { deleteImageBlob } from './imageDB';
-import { openDB, IDBPDatabase } from 'idb';
+import { db as imageDB, saveImageBlob, loadImageBlob, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB, saveMetadata, loadMetadata } from './imageDB';
 
 const DB_NAME = 'postal_snap_db';
 const DB_VERSION = 4;
@@ -36,16 +35,16 @@ const initDB = async () => {
   return db;
 };
 
-// 統合データの保存（この関数が唯一の保存手段となる）
+// 統合データの保存
 export const saveAllData = async (data: StorageData): Promise<void> => {
-  const database = await initDB();
+  const database = imageDB || await import('./imageDB').then(m => m.db);
   const oldData = await loadAllData();
 
   // 削除された画像を特定してDBから削除
   const oldImageIds = new Set([
     ...(oldData.items || []).map(i => i.image),
     ...(oldData.groups || []).flatMap(g => (g.photos || []).map(p => p.image))
-  ].filter(Boolean)); // nullやundefinedを除外
+  ].filter(Boolean));
 
   const newImageIds = new Set([
     ...(data.items || []).map(i => i.image),
@@ -63,14 +62,14 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
   }
 
   // 新しいデータ全体を保存する
-  await database.put(DATA_STORE, data, 'storage_data');
+  await database.put('data', data, 'storage_data');
 };
 
 // 統合データの読み込み
 export async function loadAllData(): Promise<StorageData> {
   try {
-    const database = await initDB();
-    const data = await database.get(DATA_STORE, 'storage_data');
+    const database = imageDB || await import('./imageDB').then(m => m.db);
+    const data = await database.get('data', 'storage_data');
     if (!data) {
       return { items: [], groups: [], tags: [] };
     }
@@ -88,23 +87,19 @@ export const generateId = (): string => {
 // アプリアイコンの保存と取得
 export async function saveAppIcon(blob: Blob): Promise<string | null> {
   try {
-    const url = URL.createObjectURL(blob);
-    localStorage.setItem('app_icon', url);
-    return url;
+    await saveAppIconToDB(blob);
+    return URL.createObjectURL(blob);
   } catch (error) {
     console.error('アイコンの保存に失敗しました:', error);
     return null;
   }
 }
 
-export const getAppIcon = (): string | null => {
-  return localStorage.getItem('app_icon');
+export const getAppIcon = async (): Promise<string | null> => {
+  const blob = await loadAppIconFromDB();
+  return blob ? URL.createObjectURL(blob) : null;
 };
 
-export const removeAppIcon = () => {
-  const iconUrl = localStorage.getItem('app_icon');
-  if (iconUrl) {
-    URL.revokeObjectURL(iconUrl);
-    localStorage.removeItem('app_icon');
-  }
+export const removeAppIcon = async () => {
+  await deleteAppIconFromDB();
 };
