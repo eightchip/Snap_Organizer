@@ -666,7 +666,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   onClick={() => onTagToggle(tag.name)}
                   style={{ backgroundColor: tag.color + '22', color: tag.color }}
                 />
-                <span className="text-xs text-gray-500 ml-0.5">{totalCount}</span>
+                {totalCount > 0 && (
+                  <span className="text-xs font-bold text-pink-600 ml-0.5">{totalCount}</span>
+                )}
                 <button onClick={() => startEditTag(idx)} className="p-1 hover:bg-gray-100 rounded">
                   <Pencil className="h-4 w-4" />
                 </button>
