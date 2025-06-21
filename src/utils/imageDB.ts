@@ -2,7 +2,7 @@ import { openDB, IDBPDatabase } from 'idb';
 import { PhotoMetadata } from '../types';
 
 const DB_NAME = 'postal_snap_db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NAME = 'images';
 const META_STORE = 'metadata';
 
