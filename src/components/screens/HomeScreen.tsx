@@ -526,6 +526,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  // 永続化: 初期化時にlocalStorageから再取得
+  useEffect(() => {
+    setCustomIcon(getAppIcon());
+  }, []);
+
   return (
     <div className="max-w-md mx-auto bg-gray-50 min-h-screen">
       <input
@@ -695,7 +700,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tags.map((tag, idx) => {
+          {tags.map((tag: { name: string; color: string }, idx: number) => {
             // タグ件数を計算
             const itemCount = items.filter(item => item.tags.includes(tag.name)).length;
             const groupPhotoCount = groups.reduce((acc, group) => acc + (group.photos ? group.photos.filter(photo => photo.tags.includes(tag.name)).length : 0), 0);
