@@ -6,13 +6,13 @@ const DB_VERSION = 2;
 const STORE_NAME = 'images';
 const META_STORE = 'metadata';
 
-let db: IDBPDatabase | null = null;
+export let db: IDBPDatabase | null = null;
 
 const initDB = async () => {
   if (db) return db;
   
   db = await openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion, transaction) {
+    upgrade(db, oldVersion, newVersion) {
       console.log(`Upgrading DB from version ${oldVersion} to ${newVersion}`);
       // The initial version (1) setup
       if (oldVersion < 1) {
