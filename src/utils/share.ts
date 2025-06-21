@@ -26,6 +26,16 @@ const createShareableText = (item: PhotoItem): string => {
   if (item.ocrText) {
     lines.push(`OCRテキスト: ${item.ocrText}`);
   }
+  // 位置情報
+  const loc = item.metadata?.location;
+  if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+    lines.push('---');
+    lines.push('位置情報:');
+    if (loc.name) lines.push(`地名: ${loc.name}`);
+    lines.push(`緯度: ${loc.lat}`);
+    lines.push(`経度: ${loc.lon}`);
+    lines.push(`Googleマップ: https://maps.google.com/?q=${loc.lat},${loc.lon}`);
+  }
   return lines.join('\n');
 };
 
@@ -37,6 +47,16 @@ const createGroupShareableText = (group: PostalItemGroup): string => {
   }
   if (group.memo) {
     lines.push(`メモ: ${group.memo}`);
+  }
+  // グループ全体の位置情報（metadata?.location）
+  const loc = group.metadata?.location;
+  if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+    lines.push('---');
+    lines.push('位置情報:');
+    if (loc.name) lines.push(`地名: ${loc.name}`);
+    lines.push(`緯度: ${loc.lat}`);
+    lines.push(`経度: ${loc.lon}`);
+    lines.push(`Googleマップ: https://maps.google.com/?q=${loc.lat},${loc.lon}`);
   }
   return lines.join('\n');
 };
