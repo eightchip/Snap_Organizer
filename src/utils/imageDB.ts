@@ -2,7 +2,7 @@ import { openDB, IDBPDatabase } from 'idb';
 import { PhotoMetadata } from '../types';
 
 const DB_NAME = 'postal_snap_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'images';
 const META_STORE = 'metadata';
 
@@ -14,25 +14,16 @@ const initDB = async () => {
   db = await openDB(DB_NAME, DB_VERSION, {
     upgrade(db, oldVersion, newVersion) {
       console.log(`Upgrading DB from version ${oldVersion} to ${newVersion}`);
-      // The initial version (1) setup
-      if (oldVersion < 1) {
-        // 画像バイナリ用のストア
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
-        }
-        // メタデータ用のストア
-        if (!db.objectStoreNames.contains(META_STORE)) {
-          const metaStore = db.createObjectStore(META_STORE, { keyPath: 'filename' });
-          metaStore.createIndex('dateTaken', 'date_taken');
-          metaStore.createIndex('location', ['location.lat', 'location.lon']);
-          metaStore.createIndex('tags', 'tags', { multiEntry: true });
-        }
+      // 必要なobject storeがなければ必ず作成
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
       }
-      // Example for future upgrade
-      // if (oldVersion < 2) {
-      //   const store = transaction.objectStore(META_STORE);
-      //   store.createIndex('new_index', 'new_field');
-      // }
+      if (!db.objectStoreNames.contains(META_STORE)) {
+        const metaStore = db.createObjectStore(META_STORE, { keyPath: 'filename' });
+        metaStore.createIndex('dateTaken', 'date_taken');
+        metaStore.createIndex('location', ['location.lat', 'location.lon']);
+        metaStore.createIndex('tags', 'tags', { multiEntry: true });
+      }
     },
   });
   
