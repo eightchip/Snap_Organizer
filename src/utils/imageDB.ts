@@ -7,17 +7,17 @@ const STORE_NAME = 'images';
 const META_STORE = 'metadata';
 
 export let db: IDBPDatabase | null = null;
+let dbPromise: Promise<IDBPDatabase> | null = null;
 
 const initDB = async () => {
   if (typeof window === 'undefined') {
     throw new Error('IndexedDBはクライアントサイドでのみ利用可能です');
   }
   if (db) return db;
-  
-  db = await openDB(DB_NAME, DB_VERSION, {
+  if (dbPromise) return dbPromise;
+  dbPromise = openDB(DB_NAME, DB_VERSION, {
     upgrade(db, oldVersion, newVersion) {
       console.log(`Upgrading DB from version ${oldVersion} to ${newVersion}`);
-      // 必要なobject storeがなければ必ず作成
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
       }
@@ -32,7 +32,7 @@ const initDB = async () => {
       }
     },
   });
-  
+  db = await dbPromise;
   return db;
 };
 
