@@ -101,51 +101,43 @@ export const shareGroup = async (group: PostalItemGroup): Promise<boolean> => {
 
 /**
  * メールでデータを共有する
- * navigator.shareが利用可能な場合はそれを使用し、
- * そうでない場合はmailto:リンクにフォールバックする
+ * attachments: [{ blob, filename, mimeType }]
  */
 export const shareDataViaEmail = async (
   subject: string,
   body: string,
-  attachment: Blob,
-  filename: string
+  attachments: { blob: Blob, filename: string, mimeType: string }[]
 ) => {
-  const file = new File([attachment], filename, { type: attachment.type });
+  const files = attachments.map(att => new File([att.blob], att.filename, { type: att.mimeType }));
 
   // Web Share APIが利用可能で、ファイルを共有できるかチェック
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
     try {
       await navigator.share({
         title: subject,
         text: body,
-        files: [file],
+        files,
       });
       console.log('Successfully shared data via Web Share API');
     } catch (error) {
       console.error('Error using Web Share API:', error);
-      // Web Share APIが失敗した場合、mailtoにフォールバック
-      fallbackToMailto(subject, body);
+      fallbackToMailto(subject, body, files);
     }
   } else {
-    // Web Share APIが利用できない場合、mailtoにフォールバック
-    fallbackToMailto(subject, body);
+    fallbackToMailto(subject, body, files);
   }
 };
 
 /**
  * mailto:リンクを生成してメールクライアントを開く
+ * 添付ファイルは自動添付できないため、案内文を追加
  */
-const fallbackToMailto = (subject: string, body: string) => {
-  const mailtoBody = `
-${body}
-
----
-添付ファイルについて:
-お使いの環境ではファイルの共有がサポートされていません。
-お手数ですが、アプリからエクスポートしたJSONファイルを添付して送信してください。
-`;
+const fallbackToMailto = (subject: string, body: string, files: File[]) => {
+  let attachmentList = '';
+  if (files.length > 0) {
+    attachmentList = '\n\n---\n【ご注意】\nこのメールには以下のファイルを添付してください:\n' + files.map(f => `・${f.name}`).join('\n');
+  }
+  const mailtoBody = `${body}${attachmentList}\n\n---\nお使いの環境ではファイルの自動添付がサポートされていません。\nお手数ですが、アプリからエクスポートしたファイルや画像を手動で添付してください。`;
   const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
-  
-  // 新しいウィンドウで開くか、現在のウィンドウをリダイレクトする
   window.open(mailtoLink, '_blank');
 }; 

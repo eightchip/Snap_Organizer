@@ -374,12 +374,42 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const checksum = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     const syncData = { version, timestamp, deviceId, data, checksum };
     const emailContent = await syncManager.generateEmailBackup(syncData);
-    
+
+    // 画像ファイルも添付
+    const attachments = [
+      { blob: emailContent.attachment, filename: `snap-organizer-backup-${Date.now()}.json`, mimeType: 'application/json' }
+    ];
+    // アイテム画像
+    for (const item of exportData.items) {
+      if (item.image) {
+        try {
+          const blob = await loadImageBlob(item.image);
+          if (blob) {
+            attachments.push({ blob, filename: `item-${item.id}.jpg`, mimeType: 'image/jpeg' });
+          }
+        } catch {}
+      }
+    }
+    // グループ画像
+    for (const group of exportData.groups) {
+      if (Array.isArray(group.photos)) {
+        for (const photo of group.photos) {
+          if (photo.image) {
+            try {
+              const blob = await loadImageBlob(photo.image);
+              if (blob) {
+                attachments.push({ blob, filename: `group-${group.id}-photo-${photo.id}.jpg`, mimeType: 'image/jpeg' });
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+
     await shareDataViaEmail(
       emailContent.subject,
       emailContent.body,
-      emailContent.attachment,
-      `snap-organizer-backup-${Date.now()}.json`
+      attachments
     );
     setShowShareModal(false);
   };
