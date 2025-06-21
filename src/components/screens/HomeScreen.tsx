@@ -384,7 +384,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       if (item.image) {
         try {
           const blob = await loadImageBlob(item.image);
-          if (blob) {
+          if (blob && blob.size > 0) {
             attachments.push({ blob, filename: `item-${item.id}.jpg`, mimeType: 'image/jpeg' });
           }
         } catch {}
@@ -397,7 +397,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           if (photo.image) {
             try {
               const blob = await loadImageBlob(photo.image);
-              if (blob) {
+              if (blob && blob.size > 0) {
                 attachments.push({ blob, filename: `group-${group.id}-photo-${photo.id}.jpg`, mimeType: 'image/jpeg' });
               }
             } catch {}
