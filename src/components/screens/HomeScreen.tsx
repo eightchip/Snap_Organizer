@@ -599,7 +599,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 placeholder="テキストやタグで検索..."
                 showAdvancedSearch={true}
                 isSearching={isSearching}
-                advancedTags={tags.map(tag => tag.name)}
+                advancedTags={tags.map((tag: { name: string }) => tag.name)}
               />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -1017,3 +1017,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     </div>
   );
 };
+
+export async function saveAppIconBase64(blob: Blob): Promise<string | null> {
+  try {
+    // Blob → Base64変換
+    const reader = new FileReader();
+    return await new Promise((resolve, reject) => {
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        localStorage.setItem('app_icon', base64);
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('アイコンの保存に失敗しました:', error);
+    return null;
+  }
+}
