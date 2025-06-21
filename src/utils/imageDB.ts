@@ -101,4 +101,19 @@ export const searchByTags = async (tags: string[]): Promise<PhotoMetadata[]> => 
 export const deleteImageBlob = async (id: string): Promise<void> => {
   const database = await initDB();
   await database.delete(STORE_NAME, id);
+};
+
+// カスタムアイコンをIndexedDBに保存
+export const saveAppIconToDB = async (blob: Blob): Promise<void> => {
+  await saveImageBlob('app_icon', blob);
+};
+
+// カスタムアイコンをIndexedDBから取得
+export const loadAppIconFromDB = async (): Promise<Blob | null> => {
+  return loadImageBlob('app_icon');
+};
+
+// カスタムアイコンをIndexedDBから削除
+export const deleteAppIconFromDB = async (): Promise<void> => {
+  await deleteImageBlob('app_icon');
 }; 

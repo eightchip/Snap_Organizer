@@ -10,13 +10,12 @@ import { useSearch, SearchQuery, SearchResult } from '../../hooks/useSearch';
 import { MAX_TAGS } from '../../constants/tags';
 import QRcode from 'qrcode.react';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
-import { loadImageBlob } from '../../utils/imageDB';
-import { LocationMap } from '../LocationMap';
-import { saveAppIcon, getAppIcon, removeAppIcon } from '../../utils/storage';
+import { loadImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB } from '../../utils/imageDB';
 import { resizeImage } from '../../utils/imageResize';
 import { imageToDataURL } from '../../utils/ocr';
 import { SyncManager } from '../../utils/syncUtils';
 import { shareDataViaEmail } from '../../utils/share';
+import { LocationMap } from '../LocationMap';
 
 interface HomeScreenProps {
   items: PhotoItem[];
@@ -36,42 +35,42 @@ interface HomeScreenProps {
   onSync: () => void;
 }
 
-const COLOR_PALETTE = [
-  // 書類・文書関連
-  { name: '請求書', color: '#3B82F6' },  // 青
-  { name: '領収書', color: '#22C55E' },  // 緑
-  { name: '契約書', color: '#A78BFA' },  // 紫
-  { name: '申請書', color: '#F59E0B' },  // オレンジ
-  { name: '通知', color: '#EC4899' },    // ピンク
+// const COLOR_PALETTE = [
+//   // 書類・文書関連
+//   { name: '請求書', color: '#3B82F6' },  // 青
+//   { name: '領収書', color: '#22C55E' },  // 緑
+//   { name: '契約書', color: '#A78BFA' },  // 紫
+//   { name: '申請書', color: '#F59E0B' },  // オレンジ
+//   { name: '通知', color: '#EC4899' },    // ピンク
 
-  // 生活関連
-  { name: '病院', color: '#EF4444' },    // 赤
-  { name: '学校', color: '#06B6D4' },    // シアン
-  { name: '住所', color: '#8B5CF6' },    // バイオレット
-  { name: '保険', color: '#10B981' },    // エメラルド
-  { name: 'メモ', color: '#6366F1' },    // インディゴ
+//   // 生活関連
+//   { name: '病院', color: '#EF4444' },    // 赤
+//   { name: '学校', color: '#06B6D4' },    // シアン
+//   { name: '住所', color: '#8B5CF6' },    // バイオレット
+//   { name: '保険', color: '#10B981' },    // エメラルド
+//   { name: 'メモ', color: '#6366F1' },    // インディゴ
 
-  // 追加のカラーパレット（新規タグ用）
-  { name: '赤', color: '#DC2626' },
-  { name: '青', color: '#2563EB' },
-  { name: '緑', color: '#059669' },
-  { name: '黄', color: '#D97706' },
-  { name: '紫', color: '#7C3AED' },
-  { name: '橙', color: '#EA580C' },
-  { name: '茶', color: '#92400E' },
-  { name: 'ピンク', color: '#DB2777' },
-  { name: 'シアン', color: '#0891B2' },
-  { name: 'マゼンタ', color: '#BE185D' },
-  { name: 'ライム', color: '#65A30D' },
-  { name: 'ネイビー', color: '#1E40AF' },
-  { name: 'オリーブ', color: '#4D7C0F' },
-  { name: 'テール', color: '#0F766E' },
-  { name: 'マルーン', color: '#9F1239' },
-  { name: 'グレー', color: '#4B5563' },
-  { name: '白', color: '#F9FAFB' },
-];
+//   // 追加のカラーパレット（新規タグ用）
+//   { name: '赤', color: '#DC2626' },
+//   { name: '青', color: '#2563EB' },
+//   { name: '緑', color: '#059669' },
+//   { name: '黄', color: '#D97706' },
+//   { name: '紫', color: '#7C3AED' },
+//   { name: '橙', color: '#EA580C' },
+//   { name: '茶', color: '#92400E' },
+//   { name: 'ピンク', color: '#DB2777' },
+//   { name: 'シアン', color: '#0891B2' },
+//   { name: 'マゼンタ', color: '#BE185D' },
+//   { name: 'ライム', color: '#65A30D' },
+//   { name: 'ネイビー', color: '#1E40AF' },
+//   { name: 'オリーブ', color: '#4D7C0F' },
+//   { name: 'テール', color: '#0F766E' },
+//   { name: 'マルーン', color: '#9F1239' },
+//   { name: 'グレー', color: '#4B5563' },
+//   { name: '白', color: '#F9FAFB' },
+// ];
 
-const DEFAULT_TAGS = COLOR_PALETTE.slice(0, 10); // 最初の10個を初期タグとして使用
+// const DEFAULT_TAGS = COLOR_PALETTE.slice(0, 10); // 最初の10個を初期タグとして使用
 
 // usePostalTagsフックを拡張
 const usePostalTagsWithLimit = () => {
@@ -152,7 +151,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const [showMap, setShowMap] = useState(false);
 
-  const [customIcon, setCustomIcon] = useState<string | null>(getAppIcon());
+  const [customIcon, setCustomIcon] = useState<string | null>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
 
   const [showShareModal, setShowShareModal] = useState(false);
@@ -508,10 +507,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       const resizedBase64 = await resizeImage(await imageToDataURL(file), 40, 40);
       const response = await fetch(resizedBase64);
       const blob = await response.blob();
-      const iconUrl = await saveAppIcon(blob);
-      if (iconUrl) {
-        setCustomIcon(iconUrl);
-      }
+      await saveAppIconToDB(blob);
+      setCustomIcon(URL.createObjectURL(blob));
     } catch (error) {
       console.error('アイコンの設定に失敗しました:', error);
       alert('アイコンの設定に失敗しました');
@@ -521,14 +518,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // アイコンの削除
   const handleRemoveIcon = () => {
     if (window.confirm('カスタムアイコンを削除しますか？')) {
-      removeAppIcon();
+      deleteAppIconFromDB();
       setCustomIcon(null);
     }
   };
 
-  // 永続化: 初期化時にlocalStorageから再取得
+  // 永続化: 初期化時にIndexedDBから再取得
   useEffect(() => {
-    setCustomIcon(getAppIcon());
+    (async () => {
+      const blob = await loadAppIconFromDB();
+      if (blob) {
+        setCustomIcon(URL.createObjectURL(blob));
+      } else {
+        setCustomIcon(null);
+      }
+    })();
   }, []);
 
   return (
@@ -1017,22 +1021,3 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     </div>
   );
 };
-
-export async function saveAppIconBase64(blob: Blob): Promise<string | null> {
-  try {
-    // Blob → Base64変換
-    const reader = new FileReader();
-    return await new Promise((resolve, reject) => {
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        localStorage.setItem('app_icon', base64);
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error('アイコンの保存に失敗しました:', error);
-    return null;
-  }
-}
