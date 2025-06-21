@@ -19,22 +19,7 @@ async function loadWasmModule() {
   return wasmModule;
 }
 
-// EXIFライブラリの条件付きインポート
-let EXIF: any = null;
-async function loadExif() {
-  if (!EXIF) {
-    try {
-      EXIF = await import('exif-js');
-    } catch (error) {
-      console.warn('EXIF library not available:', error);
-      EXIF = null;
-    }
-  }
-  return EXIF;
-}
-
 const PROCESSING_TIMEOUT = 30000; // 30秒タイムアウト
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 
 async function initializeWasm() {
   if (!wasmInitialized) {
