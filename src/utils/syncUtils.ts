@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import pako from 'pako';
+import { loadImageBlob } from './imageDB';
 
 export interface SyncData {
   version: string;
@@ -98,43 +99,63 @@ export class SyncManager {
     return defaultName;
   }
 
+  // Blob→base64変換ユーティリティ（App.tsx等にあればimport、なければ下記を追加）
+  private blobToBase64 = async (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   // データの準備（高度な圧縮）
   async prepareSyncData(items: any[], groups: any[], tags: any[]): Promise<SyncData> {
-    // さらにデータを最小化
+    // 画像データをbase64で埋め込む
+    const itemsWithImageData = await Promise.all(
+      items.map(async item => {
+        let imageData = null;
+        if (item.image) {
+          const blob = await loadImageBlob(item.image);
+          imageData = blob ? await this.blobToBase64(blob) : null;
+        }
+        return {
+          ...item,
+          image: imageData, // ここでIDではなくbase64データを格納
+        };
+      })
+    );
+
+    const groupsWithImageData = await Promise.all(
+      groups.map(async group => {
+        const photosWithImageData = await Promise.all(
+          group.photos.map(async photo => {
+            let imageData = null;
+            if (photo.image) {
+              const blob = await loadImageBlob(photo.image);
+              imageData = blob ? await this.blobToBase64(blob) : null;
+            }
+            return {
+              ...photo,
+              image: imageData, // ここもbase64データ
+            };
+          })
+        );
+        return {
+          ...group,
+          photos: photosWithImageData,
+        };
+      })
+    );
+
     const minimalData = {
-      items: items.map(item => ({
-        id: item.id,
-        image: item.image,
-        tags: item.tags || [],
-        memo: item.memo || '',
-        createdAt: item.createdAt instanceof Date ? item.createdAt.getTime() : new Date(item.createdAt).getTime(),
-        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.getTime() : new Date(item.updatedAt).getTime(),
-        metadata: item.metadata,
-        ocrText: item.ocrText,
-      })),
-      groups: groups.map(group => ({
-        id: group.id,
-        title: group.title || '',
-        tags: group.tags || [],
-        memo: group.memo || '',
-        createdAt: group.createdAt instanceof Date ? group.createdAt.getTime() : new Date(group.createdAt).getTime(),
-        updatedAt: group.updatedAt instanceof Date ? group.updatedAt.getTime() : new Date(group.updatedAt).getTime(),
-        photos: group.photos.map(photo => ({
-          id: photo.id,
-          image: photo.image,
-          tags: photo.tags || [],
-          memo: photo.memo || '',
-          metadata: photo.metadata,
-          ocrText: photo.ocrText,
-        }))
-      })),
+      items: itemsWithImageData,
+      groups: groupsWithImageData,
       tags: tags
     };
 
-    // チェックサムを計算
     const checksum = await this.calculateChecksum(JSON.stringify(minimalData));
 
-    // SyncData形式で返す
     return {
       version: '1.0',
       timestamp: Date.now(),
