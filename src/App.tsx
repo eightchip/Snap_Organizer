@@ -271,24 +271,28 @@ function App() {
     navigateTo({ type: 'detail-group', groupId });
   };
 
-  const handleBulkTagRename = async (oldName: string, newName: string, currentTags: Tag[]) => {
+  const handleBulkTagRename = async (oldName: string, newName: string, currentTags?: Tag[]) => {
     setError(null);
     try {
+      const tagsToSave = currentTags || tags;
+
       const nextItems = items.map(item => ({
         ...item,
-        tags: (item.tags || []).map(t => (t === oldName ? newName : t))
+        tags: (item.tags || []).map(t => (t === oldName ? newName : t)).filter(Boolean)
       }));
       const nextGroups = groups.map(group => ({
         ...group,
-        tags: (group.tags || []).map(t => (t === oldName ? newName : t))
+        tags: (group.tags || []).map(t => (t === oldName ? newName : t)).filter(Boolean)
       }));
       
-      const nextStorageData = { items: nextItems, groups: nextGroups, tags: currentTags };
+      const nextStorageData = { items: nextItems, groups: nextGroups, tags: tagsToSave };
       await saveAllData(nextStorageData);
       
       setItems(nextItems);
       setGroups(nextGroups);
-      setTags(currentTags);
+      if (currentTags) {
+        setTags(currentTags);
+      }
 
     } catch (error: any) {
       setError(error.message || 'タグの一括変更に失敗しました');
@@ -344,7 +348,8 @@ function App() {
     if (oldTag.name !== trimmedName) {
       await handleBulkTagRename(oldTag.name, trimmedName, nextTags);
     } else {
-      await saveAllData({ items, groups, tags: nextTags });
+      const nextStorageData = { items, groups, tags: nextTags };
+      await saveAllData(nextStorageData);
       setTags(nextTags);
     }
     
@@ -365,6 +370,12 @@ function App() {
       await handleBulkTagRename(tagToRemove.name, '', nextTags);
     }
   };
+
+  const handleTagDeleteFromItem = async (tagName: string) => {
+    if (window.confirm(`このアイテムからタグ「${tagName}」を削除しますか？`)) {
+        await handleBulkTagRename(tagName, '');
+    }
+  }
 
   const renderScreen = () => {
     switch (appState.screen.type) {
@@ -427,7 +438,6 @@ function App() {
         return (
           <DetailScreen
             item={item}
-            availableTags={tags}
             onBack={() => navigateTo({ type: 'home' })}
             onUpdate={(updates) => handleUpdateItem(item.id, updates)}
             onDelete={() => {
@@ -438,6 +448,9 @@ function App() {
               });
               navigateTo({ type: 'home' });
             }}
+            availableTags={tags}
+            onAddTagToItem={handleAddTag}
+            onDeleteTagFromItem={handleTagDeleteFromItem}
           />
         );
 
@@ -447,9 +460,8 @@ function App() {
         return (
           <DetailGroupScreen
             group={group}
-            availableTags={tags}
             onBack={() => navigateTo({ type: 'home' })}
-            onUpdate={(updates) => updateGroup(group.id, updates).then(() => {
+            onUpdateGroup={(updates) => updateGroup(group.id, updates).then(() => {
               setTimeout(() => {
                 saveAllData({ items, groups, tags });
               }, 0);
@@ -462,22 +474,10 @@ function App() {
               });
               navigateTo({ type: 'home' });
             }}
-            showAddTag={showAddTag}
-            setShowAddTag={setShowAddTag}
-            newTagName={newTagName}
-            setNewTagName={setNewTagName}
-            newTagColor={newTagColor}
-            setNewTagColor={setNewTagColor}
-            tagEditIdx={tagEditIdx}
-            tagEditName={tagEditName}
-            setTagEditName={setTagEditName}
-            tagEditColor={tagEditColor}
-            setTagEditColor={setTagEditColor}
-            handleAddTag={handleAddTag}
-            startEditTag={startEditTag}
-            handleEditTag={handleEditTag}
-            handleCancelEdit={handleCancelEdit}
-            handleRemoveTag={handleRemoveTag}
+            availableTags={tags}
+            onAddTagToGroup={handleAddTag}
+            onDeleteTagFromGroup={handleTagDeleteFromItem}
+            onUpdateItemInGroup={handleUpdateItem}
           />
         );
 
