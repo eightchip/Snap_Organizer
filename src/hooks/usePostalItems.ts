@@ -1,22 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
-import { PhotoItem, PostalItemGroup, StorageData } from '../types';
-import { loadAllData } from '../utils/storage';
+import { useState, useCallback } from 'react';
+import { PhotoItem, PostalItemGroup } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 export const usePostalItems = () => {
   const [items, setItems] = useState<PhotoItem[]>([]);
   const [groups, setGroups] = useState<PostalItemGroup[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  useEffect(() => {
-    const initialize = async () => {
-      const data = await loadAllData();
-      setItems(data.items || []);
-      setGroups(data.groups || []);
-      setIsInitialized(true);
-    };
-    initialize();
-  }, []);
+  
+  // このフックは状態の保持とそれに関連するロジックのみに責任を持つ。
+  // データの読み込み（初期化）はApp.tsxに一元化するため、
+  // isInitializedとuseEffectによるloadAllDataの呼び出しは削除する。
 
   const getGroup = useCallback((id: string) => {
     return groups.find(g => g.id === id);
@@ -121,7 +113,6 @@ export const usePostalItems = () => {
   return {
     items,
     groups,
-    isInitialized,
     addItem,
     addGroup,
     updateItem,

@@ -50,12 +50,9 @@ function App() {
   // 検索とタグフィルター用の状態
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]); // タグもグローバルstateで管理
-
-  const [appState, setAppState] = useState<AppState>({
-    screen: { type: 'home' }
-  });
-
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [appState, setAppState] = useState<AppState>({ screen: { type: 'home' } });
   const [error, setError] = useState<string | null>(null);
 
   // App関数内でタグ編集UIのstate/操作を定義
@@ -66,13 +63,22 @@ function App() {
   const [tagEditName, setTagEditName] = useState('');
   const [tagEditColor, setTagEditColor] = useState('#3B82F6');
 
-  // 起動時にIndexedDBから全データをstateに反映
+  // 起動時にIndexedDBから全データをstateに反映する唯一の場所
   useEffect(() => {
-    loadAllData().then(data => {
-      setItems(data.items || []);
-      setGroups(data.groups || []);
-      setTags(data.tags || []);
-    });
+    const initializeApp = async () => {
+      try {
+        const data = await loadAllData();
+        setItems(data.items || []);
+        setGroups(data.groups || []);
+        setTags(data.tags || []);
+      } catch (e) {
+        console.error("Initialization failed", e);
+        setError("アプリの起動に失敗しました。");
+      } finally {
+        setIsInitialized(true);
+      }
+    };
+    initializeApp();
   }, []);
 
   // インポート
@@ -383,6 +389,11 @@ function App() {
       await handleBulkTagRename(tagToRemove.name, '', nextTags);
     }
   };
+
+  // データが初期化されるまでローディング画面を表示
+  if (!isInitialized) {
+    return <div>Loading...</div>;
+  }
 
   const renderScreen = () => {
     switch (appState.screen.type) {
