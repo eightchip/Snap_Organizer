@@ -5,6 +5,7 @@ import { initDB, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppI
 
 // 統合データの保存
 export const saveAllData = async (data: StorageData): Promise<void> => {
+  console.log("Saving data to DB:", JSON.stringify(data, null, 2));
   const database = await initDB();
   const oldData = await loadAllData();
 
