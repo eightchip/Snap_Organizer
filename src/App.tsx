@@ -107,18 +107,18 @@ function App() {
       let fixedTags: Tag[] = [];
       if (data.items) {
         fixedItems = await fixDatesAndImages(data.items);
-        setItems(fixedItems);
       }
       if (data.groups) {
         fixedGroups = await fixDatesAndImages(data.groups);
-        setGroups(fixedGroups);
       }
       if (data.tags) {
         fixedTags = data.tags;
-        setTags(fixedTags);
-      } else {
-        fixedTags = [];
       }
+
+      // データをまとめて更新
+      setItems(fixedItems);
+      setGroups(fixedGroups);
+      setTags(fixedTags);
 
       await saveAllData({
         items: fixedItems,
