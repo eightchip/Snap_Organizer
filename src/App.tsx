@@ -247,12 +247,13 @@ function App() {
         tags: (group.tags || []).map(t => t === oldName ? newName : t)
       }));
       
-      const updatedData = { ...currentData, items: updatedItems, groups: updatedGroups, tags: updatedTags };
+      const updatedData = { items: updatedItems, groups: updatedGroups, tags: updatedTags };
       await saveAllData(updatedData);
 
-      setItems(updatedItems);
-      setGroups(updatedGroups);
-      setTags(updatedTags);
+      setItems(updatedData.items);
+      setGroups(updatedData.groups);
+      setTags(updatedData.tags);
+
     } catch (error: any) {
       setError(error.message || 'タグの一括変更に失敗しました');
       console.error('Bulk tag rename error:', error);
@@ -325,17 +326,21 @@ function App() {
   };
 
   const handleEditTag = (idx: number|null, name: string, color: string) => {
-    if (idx === null) return;
+    if (idx === null || !name.trim()) return;
+
     const oldTag = tags[idx];
+    const trimmedName = name.trim();
     const newTags = [...tags];
-    newTags[idx] = { name, color };
+    newTags[idx] = { name: trimmedName, color };
+    
     setTags(newTags);
 
-    if (oldTag.name !== name) {
-      handleBulkTagRename(oldTag.name, name, newTags);
+    if (oldTag.name !== trimmedName) {
+      handleBulkTagRename(oldTag.name, trimmedName, newTags);
     } else {
       saveAllData({ items, groups, tags: newTags });
     }
+    
     handleCancelEdit();
   };
 
