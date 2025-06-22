@@ -208,15 +208,20 @@ function App() {
   const handleUnifiedAdd = async (data: PhotoItem | PostalItemGroup) => {
     setError(null);
     try {
+      let nextItems = items;
+      let nextGroups = groups;
+
       if ('photos' in data) {
-        // Group mode
-        addGroup(data);
-        await saveAllData({ items, groups: [...groups, data], tags });
+        nextGroups = [...groups, data];
       } else {
-        // Single photo mode
-        addItem(data);
-        await saveAllData({ items: [...items, data], groups, tags });
+        nextItems = [...items, data];
       }
+      
+      const nextStorageData = { items: nextItems, groups: nextGroups, tags };
+      await saveAllData(nextStorageData);
+
+      setItems(nextItems);
+      setGroups(nextGroups);
       navigateTo({ type: 'home' });
     } catch (error: any) {
       setError(error.message || '保存に失敗しました');
@@ -224,14 +229,38 @@ function App() {
     }
   };
 
-  const handleUpdateItem = (itemId: string, updates: Partial<PhotoItem>) => {
-    updateItem(itemId, updates).then(() => {
-      // This is not ideal, but usePostalItems doesn't return the new state
-      // A better solution would be to refactor usePostalItems to handle state transactionally
-      setTimeout(() => {
-        saveAllData({ items, groups, tags });
-      }, 0);
-    });
+  const handleUpdateItem = async (itemId: string, updates: Partial<PhotoItem>) => {
+    setError(null);
+    let itemFound = false;
+
+    const updateInItems = (currentItems: PhotoItem[]): PhotoItem[] => {
+      return currentItems.map(item => {
+        if (item.id === itemId) {
+          itemFound = true;
+          return { ...item, ...updates, updatedAt: new Date() };
+        }
+        return item;
+      });
+    };
+
+    let nextItems = updateInItems(items);
+    let nextGroups = groups;
+
+    if (!itemFound) {
+      nextGroups = groups.map(group => {
+        const originalPhotos = group.photos;
+        const updatedPhotos = updateInItems(originalPhotos);
+        if (originalPhotos !== updatedPhotos) { // Check if photos array was actually updated
+             return { ...group, photos: updatedPhotos, updatedAt: new Date() };
+        }
+        return group;
+      });
+    }
+
+    const nextStorageData = { items: nextItems, groups: nextGroups, tags };
+    await saveAllData(nextStorageData);
+    setItems(nextItems);
+    setGroups(nextGroups);
   };
 
   const handleItemClick = (itemId: string) => {
@@ -242,25 +271,24 @@ function App() {
     navigateTo({ type: 'detail-group', groupId });
   };
 
-  const handleBulkTagRename = async (oldName: string, newName: string, updatedTags: Tag[]) => {
+  const handleBulkTagRename = async (oldName: string, newName: string, currentTags: Tag[]) => {
     setError(null);
     try {
-      const currentData = await loadAllData();
-      const updatedItems = (currentData.items || []).map(item => ({
+      const nextItems = items.map(item => ({
         ...item,
-        tags: (item.tags || []).map(t => t === oldName ? newName : t)
+        tags: (item.tags || []).map(t => (t === oldName ? newName : t))
       }));
-      const updatedGroups = (currentData.groups || []).map(group => ({
+      const nextGroups = groups.map(group => ({
         ...group,
-        tags: (group.tags || []).map(t => t === oldName ? newName : t)
+        tags: (group.tags || []).map(t => (t === oldName ? newName : t))
       }));
       
-      const updatedData = { items: updatedItems, groups: updatedGroups, tags: updatedTags };
-      await saveAllData(updatedData);
-
-      setItems(updatedData.items);
-      setGroups(updatedData.groups);
-      setTags(updatedData.tags);
+      const nextStorageData = { items: nextItems, groups: nextGroups, tags: currentTags };
+      await saveAllData(nextStorageData);
+      
+      setItems(nextItems);
+      setGroups(nextGroups);
+      setTags(currentTags);
 
     } catch (error: any) {
       setError(error.message || 'タグの一括変更に失敗しました');
@@ -271,60 +299,31 @@ function App() {
   const handleBulkDelete = async (itemIds: string[], groupIds: string[]) => {
     setError(null);
     try {
-      // 削除対象の画像IDを収集
-      const imageIdsToDelete = new Set<string>();
+      const nextItems = items.filter(item => !itemIds.includes(item.id));
+      const nextGroups = groups.filter(group => !groupIds.includes(group.id));
       
-      // 単一アイテムの画像
-      (items || [])
-        .filter(item => itemIds.includes(item.id))
-        .forEach(item => {
-          if (item.image) imageIdsToDelete.add(item.image);
-        });
-      
-      // グループ内の画像
-      (groups || [])
-        .filter(group => groupIds.includes(group.id))
-        .forEach(group => {
-          (group.photos || []).forEach(photo => {
-            if (photo.image) imageIdsToDelete.add(photo.image);
-          });
-        });
+      const nextStorageData = { items: nextItems, groups: nextGroups, tags };
+      await saveAllData(nextStorageData);
 
-      // データの削除
-      const data = await loadAllData();
-      const updatedItems = (data.items || []).filter(item => !itemIds.includes(item.id));
-      const updatedGroups = (data.groups || []).filter(group => !groupIds.includes(group.id));
-      
-      // データを保存
-      await saveAllData({ ...data, items: updatedItems, groups: updatedGroups });
-      
-      // 画像の削除
-      for (const imageId of imageIdsToDelete) {
-        try {
-          await deleteImageBlob(imageId);
-        } catch (error) {
-          console.error('Failed to delete image:', imageId, error);
-        }
-      }
+      setItems(nextItems);
+      setGroups(nextGroups);
 
-      // 状態を更新
-      setItems(updatedItems);
-      setGroups(updatedGroups);
     } catch (error: any) {
-      setError(error.message || '削除に失敗しました');
-      console.error('Delete error:', error);
+      setError(error.message || '一括削除に失敗しました');
+      console.error('Bulk delete error:', error);
     }
   };
 
-  const handleAddTag = () => {
+  const handleAddTag = async () => {
     if (!newTagName.trim()) return;
-    const newTag = { name: newTagName.trim(), color: newTagColor };
-    const updated = [...tags, newTag];
-    setTags(updated);
+    const nextTags = [...tags, { name: newTagName.trim(), color: newTagColor }];
+    
+    await saveAllData({ items, groups, tags: nextTags });
+    
+    setTags(nextTags);
     setNewTagName('');
     setNewTagColor('#3B82F6');
     setShowAddTag(false);
-    saveAllData({ items, groups, tags: updated });
   };
 
   const startEditTag = (idx: number) => {
@@ -333,20 +332,20 @@ function App() {
     setTagEditColor(tags[idx].color);
   };
 
-  const handleEditTag = (idx: number|null, name: string, color: string) => {
+  const handleEditTag = async (idx: number|null, name: string, color: string) => {
     if (idx === null || !name.trim()) return;
 
     const oldTag = tags[idx];
     const trimmedName = name.trim();
-    const newTags = [...tags];
-    newTags[idx] = { name: trimmedName, color };
     
-    setTags(newTags);
+    const nextTags = [...tags];
+    nextTags[idx] = { name: trimmedName, color };
 
     if (oldTag.name !== trimmedName) {
-      handleBulkTagRename(oldTag.name, trimmedName, newTags);
+      await handleBulkTagRename(oldTag.name, trimmedName, nextTags);
     } else {
-      saveAllData({ items, groups, tags: newTags });
+      await saveAllData({ items, groups, tags: nextTags });
+      setTags(nextTags);
     }
     
     handleCancelEdit();
@@ -358,15 +357,13 @@ function App() {
     setTagEditColor('#3B82F6');
   };
 
-  const handleRemoveTag = (idx: number) => {
-    if (!window.confirm('このタグを削除しますか？')) return;
-    const delName = tags[idx].name;
-    const updated = tags.filter((_, i) => i !== idx);
-    setTags(updated);
-    setTagEditIdx(null);
-    setTagEditName('');
-    setTagEditColor('#3B82F6');
-    saveAllData({ items, groups, tags: updated });
+  const handleRemoveTag = async (idx: number) => {
+    const tagToRemove = tags[idx];
+    if (window.confirm(`タグ「${tagToRemove.name}」を削除しますか？このタグはすべてのアイテムから削除されます。`)) {
+      const nextTags = tags.filter((_, i) => i !== idx);
+      // Call bulk rename with an empty new name to effectively remove the tag from items/groups
+      await handleBulkTagRename(tagToRemove.name, '', nextTags);
+    }
   };
 
   const renderScreen = () => {
