@@ -32,7 +32,7 @@ interface HomeScreenProps {
   getExportData: () => Promise<any>;
   onBulkDelete: (itemIds: string[], groupIds: string[]) => void;
   availableTags: Tag[];
-  // タグ編集UI用props
+  // タグ編集UI用props  差分生成用
   showAddTag: boolean;
   setShowAddTag: (v: boolean) => void;
   newTagName: string;
