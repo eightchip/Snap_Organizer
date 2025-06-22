@@ -4,12 +4,13 @@ import { TagChip } from '../TagChip';
 import { PhotoItem, PostalItemGroup, PhotoMetadata, Location, Tag } from '../../types';
 import { runTesseractOcr } from '../../utils/ocr';
 import { normalizeOcrText } from '../../utils/normalizeOcrText';
-import { resizeImageWithOrientation } from '../../utils/imageResize';
+import { resizeImageWithOrientation, isTextImage, batchResizeImages, adjustImageOrientation, resizeImage } from '../../utils/imageResize';
 import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
 import init from '../../pkg/your_wasm_pkg';
 import EXIF from 'exif-js';
 import { coordinatesToLocationName, extractDisplayLocationName } from '../../utils/locationConverter';
+import { imageToDataURL } from '../../utils/ocr';
 
 interface UnifiedAddScreenProps {
   onSave: (data: PhotoItem | PostalItemGroup) => void;
@@ -283,7 +284,12 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
       const id = generateId();
       console.log('画像処理開始:', fileKey, id);
 
-      const resizedBase64 = await resizeImageWithOrientation(file);
+      // 画像をbase64で取得
+      const orientedBase64 = await adjustImageOrientation(file);
+      // 品質自動判定
+      const quality = (await isTextImage(orientedBase64)) ? 0.95 : 0.8;
+      // リサイズ
+      const resizedBase64 = await resizeImage(orientedBase64, 1000, 1000, quality);
       const response = await fetch(resizedBase64);
       const resizedBlob = await response.blob();
       await saveImageBlob(id, resizedBlob);
@@ -347,31 +353,28 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
     setSaveError(null);
 
     try {
+      const files = Array.from(event.target.files);
       const newPhotos: PhotoItemWithRotation[] = [];
-
-      for (const file of Array.from(event.target.files)) {
-        const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
-        if (processedFilesRef.current.has(fileKey)) {
-          console.log('既に処理済みのファイルです:', fileKey);
-          continue;
-        }
-        processedFilesRef.current.add(fileKey);
-
+      // 1. 画像をbase64で読み込み
+      const base64s = await Promise.all(files.map(file => imageToDataURL(file)));
+      // 2. 各画像の品質を判定
+      const qualities = await Promise.all(base64s.map(async (b64: string) => (await isTextImage(b64)) ? 0.95 : 0.8));
+      // 3. 一括リサイズ
+      const resizedBase64s = await batchResizeImages(base64s, qualities, 1000, 1000);
+      // 4. 保存
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const id = generateId();
-        console.log('画像処理開始:', fileKey, id);
-
-        const resizedBase64 = await resizeImageWithOrientation(file);
+        const resizedBase64 = resizedBase64s[i];
         const response = await fetch(resizedBase64);
         const resizedBlob = await response.blob();
         await saveImageBlob(id, resizedBlob);
-
         const metadata: PhotoMetadata = {
           filename: file.name,
           source: 'bulk',
           dateTaken: await extractDateTaken(file),
           location: await extractLocation(file),
         };
-
         const photo: PhotoItemWithRotation = {
           id,
           image: id,
@@ -383,11 +386,8 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
           memo: '',
           rotation: 0,
         };
-
-        console.log('画像処理完了:', fileKey, id);
         newPhotos.push(photo);
       }
-
       setPhotos(prev => [...prev, ...newPhotos]);
     } catch (error) {
       console.error('ファイル処理エラー:', error);

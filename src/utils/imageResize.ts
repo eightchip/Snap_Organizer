@@ -222,7 +222,7 @@ export async function preprocessImageForOcr(base64Image: string): Promise<string
   }
 }
 
-const adjustImageOrientation = (file: File): Promise<string> => {
+export const adjustImageOrientation = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -244,4 +244,84 @@ export async function resizeImageWithOrientation(
 ): Promise<string> {
   const orientedBase64 = await adjustImageOrientation(file);
   return resizeImage(orientedBase64, maxWidth, maxHeight, quality);
+}
+
+// 画像が文字画像か写真かを自動判定する関数
+export async function isTextImage(base64Image: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(false);
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      // 色数をカウント
+      const colorSet = new Set();
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        colorSet.add(`${r>>4}_${g>>4}_${b>>4}`); // 16階調で近似
+      }
+      const colorCount = colorSet.size;
+      // エッジ量（簡易: 輝度差が大きいピクセル数）
+      let edgeCount = 0;
+      for (let y = 1; y < canvas.height; y++) {
+        for (let x = 1; x < canvas.width; x++) {
+          const idx = (y * canvas.width + x) * 4;
+          const idxL = (y * canvas.width + (x-1)) * 4;
+          const idxT = ((y-1) * canvas.width + x) * 4;
+          const lum = 0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2];
+          const lumL = 0.299*data[idxL]+0.587*data[idxL+1]+0.114*data[idxL+2];
+          const lumT = 0.299*data[idxT]+0.587*data[idxT+1]+0.114*data[idxT+2];
+          if (Math.abs(lum - lumL) > 40 || Math.abs(lum - lumT) > 40) edgeCount++;
+        }
+      }
+      // 判定基準: 色数が少なく、エッジが多い→文字画像
+      const totalPixels = canvas.width * canvas.height;
+      const edgeRatio = edgeCount / totalPixels;
+      // 色数32以下、かつエッジ比率3%以上なら文字画像とみなす
+      if (colorCount <= 32 && edgeRatio > 0.03) {
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    };
+    img.onerror = () => resolve(false);
+    img.src = base64Image;
+  });
+}
+
+// 複数画像を一括でリサイズ・品質調整する関数
+export async function batchResizeImages(
+  base64Images: string[],
+  qualities: number[],
+  maxWidth: number = 1000,
+  maxHeight: number = 1000
+): Promise<string[]> {
+  const module = await loadWasmModule();
+  if (!module || !module.batch_resize_images) {
+    throw new Error('WASM batch_resize_images未実装');
+  }
+  // base64→Uint8Array配列
+  const imageArrays = base64Images.map(base64ToUint8Array);
+  // JS配列→js_sys::Array
+  // WASM呼び出し
+  const result = module.batch_resize_images(imageArrays, qualities, maxWidth, maxHeight);
+  // 結果: Uint8Array[]
+  // それぞれbase64に変換
+  const resizedBase64s: string[] = [];
+  for (let i = 0; i < result.length; i++) {
+    const arr = result[i];
+    // Uint8Array→base64
+    let binary = '';
+    for (let j = 0; j < arr.length; j++) {
+      binary += String.fromCharCode(arr[j]);
+    }
+    const b64 = btoa(binary);
+    resizedBase64s.push(`data:image/jpeg;base64,${b64}`);
+  }
+  return resizedBase64s;
 } 

@@ -3,7 +3,7 @@ import { PostalItemGroup, PhotoItem, Tag, Location } from '../../types';
 import { TagChip } from '../TagChip';
 import { ArrowLeft, Edit3, Check, X, Trash2, Plus, Camera, Upload, Share2, RotateCw, RotateCcw, Pencil, MapPin, GripVertical, Navigation } from 'lucide-react';
 import { imageToDataURL } from '../../utils/ocr';
-import { resizeImage } from '../../utils/imageResize';
+import { resizeImage, isTextImage, batchResizeImages } from '../../utils/imageResize';
 import { generateId } from '../../utils/storage';
 import { loadImageBlob, saveImageBlob } from '../../utils/imageDB';
 import { shareGroup } from '../../utils/share';
@@ -226,29 +226,39 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
     }
   };
 
-  const handleAddPhoto = async (file: File) => {
+  const handleAddPhoto = async (fileOrFiles: File | File[]) => {
     try {
-      const imageDataURL = await imageToDataURL(file);
-      const resizedImage = await resizeImage(imageDataURL, 1000, 1000);
-      const blob = await (await fetch(resizedImage)).blob();
-      const reader = new FileReader();
-      reader.onload = () => {
-        const newPhoto: PhotoItem = {
-          id: generateId(),
-          image: reader.result as string,
-          ocrText: '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          tags: [],
-          memo: '',
-          metadata: {
-            filename: file.name,
-            source: 'bulk',
-          },
+      const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+      // 1. 画像をbase64で読み込み
+      const base64s = await Promise.all(files.map(file => imageToDataURL(file)));
+      // 2. 各画像の品質を判定
+      const qualities = await Promise.all(base64s.map(async (b64: string) => (await isTextImage(b64)) ? 0.95 : 0.8));
+      // 3. 一括リサイズ
+      const resizedBase64s = await batchResizeImages(base64s, qualities, 1000, 1000);
+      // 4. 保存
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const resizedBase64 = resizedBase64s[i];
+        const reader = new FileReader();
+        reader.onload = () => {
+          const newPhoto: PhotoItem = {
+            id: generateId(),
+            image: reader.result as string,
+            ocrText: '',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            tags: [],
+            memo: '',
+            metadata: {
+              filename: file.name,
+              source: 'bulk',
+            },
+          };
+          setEditedPhotos(prev => [...prev, newPhoto]);
         };
-        setEditedPhotos(prev => [...prev, newPhoto]);
-      };
-      reader.readAsDataURL(blob);
+        // base64→Blob→FileReader
+        fetch(resizedBase64).then(r => r.blob()).then(blob => reader.readAsDataURL(blob));
+      }
     } catch (error) {
       console.error('写真の追加に失敗しました:', error);
       alert('写真の追加に失敗しました');
