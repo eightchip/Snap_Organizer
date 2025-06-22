@@ -1,17 +1,21 @@
 /* tslint:disable */
 /* eslint-disable */
-export function preprocess_image(image_data: Uint8Array): Uint8Array;
-export function preprocess_image_color(image_data: Uint8Array): Uint8Array;
+export function batch_resize_images(images: Array<any>, qualities: Array<any>, max_width: number, max_height: number): Array<any>;
+export function resize_image(base64_image: string, max_width: number, max_height: number, quality: number): string;
+export function preprocess_image_for_ocr(base64_image: string): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly preprocess_image: (a: number, b: number) => [number, number];
-  readonly preprocess_image_color: (a: number, b: number) => [number, number];
-  readonly __wbindgen_export_0: WebAssembly.Table;
-  readonly __wbindgen_malloc: (a: number, b: number) => number;
+  readonly batch_resize_images: (a: any, b: any, c: number, d: number) => any;
+  readonly resize_image: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+  readonly preprocess_image_for_ocr: (a: number, b: number) => [number, number, number, number];
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  readonly __wbindgen_malloc: (a: number, b: number) => number;
+  readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+  readonly __wbindgen_export_3: WebAssembly.Table;
+  readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

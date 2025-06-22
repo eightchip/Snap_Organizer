@@ -3,11 +3,67 @@ use image::{ImageBuffer, GenericImageView, DynamicImage};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use std::io::Cursor;
 use web_sys::console;
+use js_sys::{Array, Uint8Array};
+use exif::{Reader, Tag, In};
 
 const MAX_IMAGE_SIZE: u32 = 4096;
 
+#[wasm_bindgen]
+pub fn batch_resize_images(
+    images: Array,      // JSから渡されるUint8Array[]（画像バイナリ配列）
+    qualities: Array,   // JSから渡されるf32[]（品質配列）
+    max_width: u32,
+    max_height: u32,
+) -> Array {
+    let result = Array::new();
+    for (i, img_val) in images.iter().enumerate() {
+        let img_bytes = Uint8Array::new(&img_val).to_vec();
+        let quality = qualities.get(i as u32).as_f64().unwrap_or(0.8) as f32;
+
+        // 画像デコード
+        if let Ok(img) = image::load_from_memory(&img_bytes) {
+            // EXIFで向き補正
+            let img = fix_orientation(img, &img_bytes);
+
+            // リサイズ
+            let resized = img.thumbnail(max_width, max_height);
+
+            // JPEGエンコード
+            let mut buf = Cursor::new(Vec::new());
+            let _ = resized.write_to(&mut buf, image::ImageOutputFormat::Jpeg((quality * 100.0) as u8));
+            // JSのUint8Arrayに変換してpush
+            let js_buf = Uint8Array::from(buf.get_ref().as_slice());
+            result.push(&js_buf);
+        }
+    }
+    result
+}
+
 fn log(msg: &str) {
     console::log_1(&JsValue::from_str(msg));
+}
+
+// EXIF Orientation補正関数
+fn fix_orientation(img: DynamicImage, img_bytes: &[u8]) -> DynamicImage {
+    if let Ok(exif_reader) = Reader::new().read_from_container(&mut Cursor::new(img_bytes)) {
+        if let Some(orientation) = exif_reader.get_field(Tag::Orientation, In::PRIMARY) {
+            match orientation.value.get_uint(0) {
+                Some(1) => img,
+                Some(2) => img.fliph(),
+                Some(3) => img.rotate180(),
+                Some(4) => img.flipv(),
+                Some(5) => img.rotate90().fliph(),
+                Some(6) => img.rotate90(),
+                Some(7) => img.rotate270().fliph(),
+                Some(8) => img.rotate270(),
+                _ => img,
+            }
+        } else {
+            img
+        }
+    } else {
+        img
+    }
 }
 
 fn scale_dimensions(width: u32, height: u32, max_size: u32) -> (u32, u32) {
@@ -189,28 +245,3 @@ pub fn preprocess_image_for_ocr(base64_image: &str) -> Result<String, JsValue> {
     Ok(base64_output)
 }
 
-#[wasm_bindgen]
-pub fn batch_resize_images(
-    images: js_sys::Array,      // JSから渡されるUint8Array[]（画像バイナリ配列）
-    qualities: js_sys::Array,   // JSから渡されるf32[]（品質配列）
-    max_width: u32,
-    max_height: u32,
-) -> js_sys::Array {
-    let mut result = js_sys::Array::new();
-    for (i, img_val) in images.iter().enumerate() {
-        let img_bytes = js_sys::Uint8Array::new(&img_val).to_vec();
-        let quality = qualities.get(i as u32).as_f64().unwrap_or(0.8) as f32;
-        // 画像デコード
-        if let Ok(img) = image::load_from_memory(&img_bytes) {
-            // リサイズ
-            let resized = img.thumbnail(max_width, max_height);
-            // JPEGエンコード
-            let mut buf = Cursor::new(Vec::new());
-            let _ = resized.write_to(&mut buf, image::ImageOutputFormat::Jpeg((quality * 100.0) as u8));
-            // JSのUint8Arrayに変換してpush
-            let js_buf = js_sys::Uint8Array::from(buf.get_ref().as_slice());
-            result.push(&js_buf);
-        }
-    }
-    result
-}

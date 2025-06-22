@@ -355,8 +355,10 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
     try {
       const files = Array.from(event.target.files);
       const newPhotos: PhotoItemWithRotation[] = [];
-      // 1. 画像をbase64で読み込み
-      const base64s = await Promise.all(files.map(file => imageToDataURL(file)));
+      // 1. 画像をbase64で読み込み（向き補正付き！）
+      const base64s = await Promise.all(
+        files.map(file => adjustImageOrientation(file))
+      );
       // 2. 各画像の品質を判定
       const qualities = await Promise.all(base64s.map(async (b64: string) => (await isTextImage(b64)) ? 0.95 : 0.8));
       // 3. 一括リサイズ

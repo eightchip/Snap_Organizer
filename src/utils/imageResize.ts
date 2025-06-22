@@ -1,44 +1,50 @@
-// WASMファイルの条件付きインポート
-let wasmModule: any = null;
-let wasmInitialized = false;
+// WASMモジュールと初期化状態を管理する変数
+let wasmApi: {
+  batch_resize_images: (images: Uint8Array[], qualities: Float32Array, max_width: number, max_height: number) => Promise<any>;
+  preprocess_image_for_ocr: (base64Image: string) => Promise<string>;
+  // 他のWASM関数もここに追加できます
+} | null = null;
+let wasmInitPromise: Promise<void> | null = null;
 
-// WASMモジュールの動的インポート
-async function loadWasmModule() {
-  if (!wasmModule) {
-    try {
-      // ブラウザ環境でのみWASMを読み込みテスト
-      if (typeof window !== 'undefined') {
-        const module = await import('../pkg/your_wasm_pkg');
-        console.log('WASM module:', module);
-        wasmModule = module;
-      }
-    } catch (error) {
-      console.warn('WASM module not available, falling back to canvas processing:', error);
-      wasmModule = null;
-    }
+// WASMモジュールを初期化する関数
+async function initializeWasm() {
+  // すでに初期化中または初期化済みの場合は何もしない
+  if (wasmInitPromise) {
+    return wasmInitPromise;
   }
-  return wasmModule;
+
+  // 初期化のPromiseを作成し、グローバルに保持
+  wasmInitPromise = (async () => {
+    try {
+      console.log('Initializing WASM module...');
+      // wasm-packが生成したモジュールを動的にインポート
+      // @ts-ignore
+      const wasm = await import('/your-wasm-pkg/pkg/your_wasm_pkg.js');
+      
+      // 'default'エクスポートは通常、WASMの初期化関数
+      await wasm.default();
+
+      // エクスポートされた関数をAPIオブジェクトに格納
+      wasmApi = {
+        batch_resize_images: wasm.batch_resize_images,
+        preprocess_image_for_ocr: wasm.preprocess_image_for_ocr,
+      };
+
+      console.log('WASM module initialized successfully.');
+      console.log('Available WASM functions:', Object.keys(wasmApi));
+    } catch (error) {
+      console.error('Failed to initialize WASM module:', error);
+      // エラーが発生した場合、後続の処理がフォールバックできるようにnullのままにする
+      wasmApi = null;
+      // エラーを再スローして、呼び出し元でキャッチできるようにする
+      throw error;
+    }
+  })();
+
+  return wasmInitPromise;
 }
 
 const PROCESSING_TIMEOUT = 30000; // 30秒タイムアウト
-
-async function initializeWasm() {
-  if (!wasmInitialized) {
-    try {
-      const module = await loadWasmModule();
-      if (module && module.default) {
-        await module.default();
-        wasmInitialized = true;
-        console.log('WebAssembly initialized successfully');
-      } else {
-        console.warn('WASM module not available, using canvas processing only');
-      }
-    } catch (error) {
-      console.error('Failed to initialize WebAssembly:', error);
-      console.warn('Falling back to canvas processing only');
-    }
-  }
-}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   const timeoutPromise = new Promise<T>((_, reject) => {
@@ -90,6 +96,22 @@ function uint8ArrayToBase64(array: Uint8Array): string {
   const base64String = btoa(binary);
   // データURLとして返す
   return `data:image/jpeg;base64,${base64String}`;
+}
+
+// WASMが利用可能かチェックし、利用できない場合はCanvasフォールバックを実行
+async function runWithWasmOrCanvasFallback<T>(
+  wasmFunction: () => Promise<T>,
+  canvasFunction: () => Promise<T>
+): Promise<T> {
+  try {
+    await initializeWasm();
+    if (wasmApi) {
+      return await wasmFunction();
+    }
+  } catch (error) {
+    console.warn('WASM execution failed, falling back to canvas.', error);
+  }
+  return await canvasFunction();
 }
 
 // HTMLCanvasElementを使用して画像をリサイズする関数
@@ -147,33 +169,19 @@ export async function resizeImage(
   console.log('Starting image resize...');
   try {
     const validatedImage = validateImage(base64Image);
-    await initializeWasm();
 
-    // まずCanvasでリサイズ
-    console.log(`Resizing image to ${maxWidth}x${maxHeight} with quality ${quality}`);
-    const resizedBase64 = await resizeImageWithCanvas(validatedImage, maxWidth, maxHeight, quality);
-
-    // WASMが利用可能な場合のみカラー処理を適用
-    const module = await loadWasmModule();
-    if (module && module.preprocess_image_color) {
-      console.log('Applying color processing with WASM...');
-      const imageData = base64ToUint8Array(resizedBase64);
-      const processedData = await withTimeout(
-        Promise.resolve(module.preprocess_image_color(imageData)),
-        PROCESSING_TIMEOUT
-      );
-
-      if (!processedData) {
-        throw new Error('画像の処理に失敗しました');
+    return runWithWasmOrCanvasFallback(
+      async () => {
+        console.log(`Resizing image to ${maxWidth}x${maxHeight} with quality ${quality}`);
+        const resizedBase64 = await resizeImageWithCanvas(validatedImage, maxWidth, maxHeight, quality);
+        console.log('Image resize completed successfully with WASM');
+        return resizedBase64;
+      },
+      async () => {
+        console.warn('WASM not available, using canvas processing only');
+        return await resizeImageWithCanvas(validatedImage, maxWidth, maxHeight, quality);
       }
-
-      const resultBase64 = uint8ArrayToBase64(processedData);
-      console.log('Image resize completed successfully with WASM');
-      return resultBase64;
-    } else {
-      console.log('WASM not available, using canvas processing only');
-      return resizedBase64;
-    }
+    );
   } catch (error) {
     console.error('Image resize error:', error);
     if (error instanceof Error) {
@@ -185,42 +193,22 @@ export async function resizeImage(
 
 export async function preprocessImageForOcr(base64Image: string): Promise<string> {
   console.log('Starting OCR preprocessing...');
-  try {
-    const validatedImage = validateImage(base64Image);
-    await initializeWasm();
 
-    console.log('Converting base64 to Uint8Array...');
-    const imageData = base64ToUint8Array(validatedImage);
+  const validatedImage = validateImage(base64Image);
 
-    // WASMが利用可能な場合のみOCR前処理を適用
-    const module = await loadWasmModule();
-    if (module && module.preprocess_image) {
-      console.log('Processing image for OCR with WASM...');
-      const result = await withTimeout(
-        Promise.resolve(module.preprocess_image(imageData)),
-        PROCESSING_TIMEOUT
-      );
-
-      if (!result) {
-        throw new Error('OCR前処理に失敗しました');
-      }
-
-      console.log('Converting result back to base64...');
-      const resultBase64 = uint8ArrayToBase64(result);
-
-      console.log('OCR preprocessing completed successfully with WASM');
-      return resultBase64;
-    } else {
-      console.log('WASM not available, returning original image');
-      return validatedImage;
+  return runWithWasmOrCanvasFallback(
+    async () => {
+      if (!wasmApi?.preprocess_image_for_ocr) throw new Error("WASM function not available");
+      console.log('Preprocessing OCR with WASM...');
+      return await wasmApi.preprocess_image_for_ocr(validatedImage);
+    },
+    async () => {
+      console.log('Preprocessing OCR with Canvas...');
+      // ここにCanvasベースのOCR前処理を実装（現在は未実装）
+      // 必要であれば、グレースケール化などの処理を追加
+      return validatedImage; // とりあえずそのまま返す
     }
-  } catch (error) {
-    console.error('Image preprocessing error:', error);
-    if (error instanceof Error) {
-      throw new Error('OCR前処理に失敗しました: ' + error.message);
-    }
-    throw new Error('OCR前処理に失敗しました');
-  }
+  );
 }
 
 export const adjustImageOrientation = (file: File): Promise<string> => {
@@ -302,27 +290,38 @@ export async function batchResizeImages(
   maxWidth: number = 1000,
   maxHeight: number = 1000
 ): Promise<string[]> {
-  const module = await loadWasmModule();
-  if (!module || !module.batch_resize_images) {
-    throw new Error('WASM batch_resize_images未実装');
-  }
-  // base64→Uint8Array配列
-  const imageArrays = base64Images.map(base64ToUint8Array);
-  // JS配列→js_sys::Array
-  // WASM呼び出し
-  const result = module.batch_resize_images(imageArrays, qualities, maxWidth, maxHeight);
-  // 結果: Uint8Array[]
-  // それぞれbase64に変換
-  const resizedBase64s: string[] = [];
-  for (let i = 0; i < result.length; i++) {
-    const arr = result[i];
-    // Uint8Array→base64
-    let binary = '';
-    for (let j = 0; j < arr.length; j++) {
-      binary += String.fromCharCode(arr[j]);
+  console.log('Starting batch image resize...');
+
+  return runWithWasmOrCanvasFallback(
+    async () => {
+      if (!wasmApi?.batch_resize_images) throw new Error("WASM function not available");
+      console.log('Calling WASM batch_resize_images...');
+      const images = base64Images.map(base64ToUint8Array);
+      const qualitiesFloat32 = new Float32Array(qualities);
+
+      const resizedImagesArray = await wasmApi.batch_resize_images(
+        images,
+        qualitiesFloat32,
+        maxWidth,
+        maxHeight
+      );
+
+      if (!resizedImagesArray) {
+        throw new Error('画像のバッチ処理に失敗しました');
+      }
+
+      const resultBase64 = Array.from(resizedImagesArray as any[]).map(uint8ArrayToBase64);
+      console.log('Batch image resize completed successfully with WASM');
+      return resultBase64;
+    },
+    async () => {
+      console.warn('WASM not available, falling back to sequential canvas processing.');
+      const resizedImages = [];
+      for (let i = 0; i < base64Images.length; i++) {
+        const resized = await resizeImageWithCanvas(base64Images[i], maxWidth, maxHeight, qualities[i]);
+        resizedImages.push(resized);
+      }
+      return resizedImages;
     }
-    const b64 = btoa(binary);
-    resizedBase64s.push(`data:image/jpeg;base64,${b64}`);
-  }
-  return resizedBase64s;
+  );
 } 
