@@ -6,7 +6,6 @@ import { ItemCard } from '../ItemCard';
 import { Plus, Package, X, Download, Upload, Filter, FileText, Clipboard, Share2, Pencil, Trash2, CheckSquare, Map, Image, Search } from 'lucide-react';
 // import { usePostalItems } from '../../hooks/usePostalItems';
 import { useSearch, SearchQuery } from '../../hooks/useSearch';
-import { MAX_TAGS } from '../../constants/tags';
 import QRcode from 'qrcode.react';
 // import { normalizeOcrText } from '../../utils/normalizeOcrText';
 import { loadImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB } from '../../utils/imageDB';
@@ -15,7 +14,7 @@ import { imageToDataURL } from '../../utils/ocr';
 import { SyncManager } from '../../utils/syncUtils';
 import { shareDataViaEmail } from '../../utils/share';
 import { LocationMap } from '../LocationMap';
-import PhotoGalleryModal from '../components/PhotoGalleryModal';
+import PhotoGalleryModal from '../PhotoGalleryModal';
 
 interface HomeScreenProps {
   items: PhotoItem[];
