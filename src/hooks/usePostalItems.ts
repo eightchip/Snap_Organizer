@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PhotoItem, PostalItemGroup, StorageData } from '../types';
-import { loadAllData, saveAllData } from '../utils/storage';
+import { loadAllData } from '../utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 export const usePostalItems = () => {
