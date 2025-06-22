@@ -123,6 +123,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // AND/OR切り替え用state
+  const [tagFilterMode, setTagFilterMode] = useState<'AND' | 'OR'>('AND');
+
   // 画像URLの読み込み
   useEffect(() => {
     const loadImages = async () => {
@@ -308,12 +311,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     // タグフィルター
     if (selectedTags.length > 0) {
       filtered = filtered.filter(item =>
-        selectedTags.some(tag => item.tags.includes(tag))
+        tagFilterMode === 'AND'
+          ? selectedTags.every(tag => item.tags.includes(tag))
+          : selectedTags.some(tag => item.tags.includes(tag))
       );
     }
 
     return filtered;
-  }, [showSearchResults, getSearchResultItems.items, items, startDate, endDate, selectedTags]);
+  }, [showSearchResults, getSearchResultItems.items, items, startDate, endDate, selectedTags, tagFilterMode]);
 
   const filteredGroups = useMemo(() => {
     let filtered = showSearchResults ? getSearchResultItems.groups : groups;
@@ -334,12 +339,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     // タグフィルター
     if (selectedTags.length > 0) {
       filtered = filtered.filter(group =>
-        selectedTags.some(tag => group.tags.includes(tag))
+        tagFilterMode === 'AND'
+          ? selectedTags.every(tag => group.tags.includes(tag))
+          : selectedTags.some(tag => group.tags.includes(tag))
       );
     }
 
     return filtered;
-  }, [showSearchResults, getSearchResultItems.groups, groups, startDate, endDate, selectedTags]);
+  }, [showSearchResults, getSearchResultItems.groups, groups, startDate, endDate, selectedTags, tagFilterMode]);
 
   const handleExportClick = () => {
     setShowShareModal(true);
@@ -679,7 +686,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             >
               <Filter className="h-4 w-4" />
             </button>
+            {/* AND/OR切り替え */}
+            <div className="ml-2 flex gap-1">
+              <button
+                onClick={() => setTagFilterMode('AND')}
+                className={`px-2 py-1 rounded text-xs font-bold border-2 ${tagFilterMode === 'AND' ? 'bg-blue-500 text-white border-blue-600' : 'bg-white text-blue-500 border-blue-300'}`}
+              >AND</button>
+              <button
+                onClick={() => setTagFilterMode('OR')}
+                className={`px-2 py-1 rounded text-xs font-bold border-2 ${tagFilterMode === 'OR' ? 'bg-blue-500 text-white border-blue-600' : 'bg-white text-blue-500 border-blue-300'}`}
+              >OR</button>
+            </div>
           </div>
+          {/* タグ一括解除ボタン */}
+          {selectedTags.length > 0 && (
+            <button
+              onClick={() => onTagToggle('ALL_CLEAR')}
+              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs font-bold text-gray-700 border border-gray-400"
+            >
+              選択解除
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {availableTags.map((tag: { name: string; color: string }, idx: number) => {
@@ -688,13 +715,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             const groupPhotoCount = groups.reduce((acc, group) => acc + (group.photos ? group.photos.filter(photo => photo.tags.includes(tag.name)).length : 0), 0);
             const groupCount = groups.filter(group => group.tags && group.tags.includes(tag.name)).length;
             const totalCount = itemCount + groupPhotoCount + groupCount;
+            const isSelected = selectedTags.includes(tag.name);
             return (
               <div key={tag.name} className="flex items-center gap-1">
                 <TagChip
                   tag={tag.name}
-                  selected={selectedTags.includes(tag.name)}
+                  selected={isSelected}
                   onClick={() => onTagToggle(tag.name)}
-                  style={{ backgroundColor: tag.color + '22', color: tag.color }}
+                  style={{
+                    backgroundColor: tag.color + (isSelected ? '33' : '22'),
+                    color: tag.color,
+                    borderWidth: isSelected ? 3 : 1,
+                    borderColor: isSelected ? tag.color : '#ccc',
+                    boxShadow: isSelected ? `0 0 0 2px ${tag.color}55` : undefined,
+                  }}
                 />
                 {totalCount > 0 && (
                   <span className="text-xs font-bold text-pink-600 ml-0.5">{totalCount}</span>

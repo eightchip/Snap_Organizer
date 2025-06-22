@@ -190,6 +190,10 @@ function App() {
   };
 
   const handleTagToggle = (tag: string) => {
+    if (tag === 'ALL_CLEAR') {
+      setSelectedTags([]);
+      return;
+    }
     setSelectedTags(prev =>
       prev.includes(tag)
         ? prev.filter(t => t !== tag)
