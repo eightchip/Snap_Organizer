@@ -3,54 +3,59 @@ import { initDB, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppI
 import { DBSchema, openDB } from 'idb';
 import { PhotoItem, PostalItemGroup, Tag } from '../types';
 
-// openDB, IDBPDatabase, DB_NAME, DB_VERSION, STORE_NAME, DATA_STORE, META_STORE, db, initDB などの定義・importは全て削除
+const DB_NAME = 'PostalSnapDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'storage_data';
+const KEY = 'storage_data';
 
-// 統合データの保存
-export const saveAllData = async (data: StorageData): Promise<void> => {
-  console.log("Saving data to DB:", JSON.stringify(data, null, 2));
-  const database = await initDB();
-  const oldData = await loadAllData();
+let dbPromise: Promise<IDBPDatabase<MyDB>> | null = null;
 
-  // 削除された画像を特定してDBから削除
-  const oldImageIds = new Set([
-    ...(oldData.items || []).map(i => i.image),
-    ...(oldData.groups || []).flatMap(g => (g.photos || []).map(p => p.image))
-  ].filter(Boolean));
-
-  const newImageIds = new Set([
-    ...(data.items || []).map(i => i.image),
-    ...(data.groups || []).flatMap(g => (g.photos || []).map(p => p.image))
-  ].filter(Boolean));
-
-  for (const oldId of oldImageIds) {
-    if (!newImageIds.has(oldId)) {
-      try {
-        await deleteImageBlob(oldId);
-      } catch (error) {
-        console.error(`Failed to delete orphaned image ${oldId}:`, error);
-      }
-    }
+const getDbPromise = () => {
+  if (!dbPromise) {
+    dbPromise = openDB<MyDB>(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+        }
+      },
+    });
   }
-
-  // 新しいデータ全体を保存する
-  await database.put('data', data, 'storage_data');
-  console.log('Data saved successfully:');
+  return dbPromise;
 };
 
-// 統合データの読み込み
-export async function loadAllData(): Promise<StorageData> {
+export const saveAllData = async (data: { items: PhotoItem[], groups: PostalItemGroup[], tags: Tag[] }) => {
   try {
-    const database = await initDB();
-    const data = await database.get('data', 'storage_data');
-    if (!data) {
-      return { items: [], groups: [], tags: [] };
-    }
-    return data;
+    const db = await getDbPromise();
+    console.log('SAVING THIS DATA:', JSON.stringify(data, null, 2));
+    await db.put(STORE_NAME, data, KEY);
+    console.log('Data saved successfully.');
   } catch (error) {
-    console.error('データの読み込みに失敗しました:', error);
+    console.error('Failed to save data:', error);
+    throw new Error('データベースへの保存に失敗しました。');
+  }
+};
+
+export const loadAllData = async (): Promise<{ items: PhotoItem[], groups: PostalItemGroup[], tags: Tag[] }> => {
+  try {
+    const db = await getDbPromise();
+    const data = await db.get(STORE_NAME, KEY);
+    return data || { items: [], groups: [], tags: [] };
+  } catch (error) {
+    console.error('Failed to load data:', error);
     return { items: [], groups: [], tags: [] };
   }
-}
+};
+
+export const clearAllData = async () => {
+  try {
+    const db = await getDbPromise();
+    await db.clear(STORE_NAME);
+    // You might want to clear image blobs as well
+  } catch (error) {
+    console.error('Failed to clear data:', error);
+    throw new Error('全データの削除に失敗しました。');
+  }
+};
 
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
