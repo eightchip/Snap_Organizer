@@ -58,4 +58,37 @@ export const loadLocationDictionary = async (url: string): Promise<void> => {
   } catch (error) {
     console.error('Failed to load location dictionary:', error);
   }
-}; 
+};
+
+// Nominatimのレスポンスから地名・ランドマークを優先的に抽出
+export function extractDisplayLocationName(nominatimResult: any): string | null {
+  if (!nominatimResult) return null;
+  const address = nominatimResult.address || {};
+  // 優先順: attraction, building, landmark, tourism, leisure, shop, amenity, road, suburb, city, town, village, state, country
+  const candidates = [
+    address.attraction,
+    address.building,
+    address.landmark,
+    address.tourism,
+    address.leisure,
+    address.shop,
+    address.amenity,
+    address.road,
+    address.neighbourhood,
+    address.suburb,
+    address.city,
+    address.town,
+    address.village,
+    address.state,
+    address.country
+  ];
+  // 最初に見つかったものを返す
+  for (const c of candidates) {
+    if (c && typeof c === 'string') return c;
+  }
+  // それでもなければdisplay_nameの先頭部分（カンマ区切りの最初）
+  if (nominatimResult.display_name) {
+    return nominatimResult.display_name.split(',')[0];
+  }
+  return null;
+} 

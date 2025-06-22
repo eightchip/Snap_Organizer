@@ -9,6 +9,7 @@ import { saveImageBlob, loadImageBlob } from '../../utils/imageDB';
 import { generateId } from '../../utils/storage';
 import init from '../../pkg/your_wasm_pkg';
 import EXIF from 'exif-js';
+import { coordinatesToLocationName, extractDisplayLocationName } from '../../utils/locationConverter';
 
 interface UnifiedAddScreenProps {
   onSave: (data: PhotoItem | PostalItemGroup) => void;
@@ -260,6 +261,25 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
         console.log('カメラ撮影: 既存の位置情報を使用します', locationData);
       }
 
+      // --- 地名変換を追加 ---
+      let locationName: string | null = null;
+      if (locationData) {
+        locationName = coordinatesToLocationName(locationData.lat, locationData.lon);
+        if (!locationName) {
+          // OpenStreetMap Nominatim APIで逆ジオコーディング
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${locationData.lat}&lon=${locationData.lon}&format=json`);
+            if (res.ok) {
+              const data = await res.json();
+              locationName = extractDisplayLocationName(data) || data.display_name || null;
+            }
+          } catch (e) {
+            console.warn('Nominatim逆ジオコーディング失敗:', e);
+          }
+        }
+      }
+      // --- 地名変換ここまで ---
+
       const id = generateId();
       console.log('画像処理開始:', fileKey, id);
 
@@ -280,7 +300,9 @@ export const UnifiedAddScreen: React.FC<UnifiedAddScreenProps> = ({
         filename: file.name,
         source: 'camera',
         dateTaken: await extractDateTaken(file),
-        location: locationData || exifLocation,
+        location: locationData
+          ? { ...locationData, name: locationName || undefined }
+          : exifLocation,
       };
 
       console.log('カメラ撮影: メタデータを設定', {

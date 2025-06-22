@@ -438,11 +438,15 @@ export const DetailScreen: React.FC<DetailScreenProps> = ({
               {editedLocation ? (
                 <div className="mt-4">
                   {editedLocation.name && (
-                    <p className="font-bold text-gray-800">{editedLocation.name}</p>
+                    <p className="font-bold text-lg text-blue-800 mb-1">{editedLocation.name}</p>
                   )}
-                  <p className="text-sm text-gray-500">
-                    緯度: {editedLocation.lat.toFixed(6)}, 経度: {editedLocation.lon.toFixed(6)}
-                  </p>
+                  {editedLocation.name ? (
+                    <p className="text-xs text-gray-400">緯度: {editedLocation.lat.toFixed(6)}, 経度: {editedLocation.lon.toFixed(6)}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      緯度: {editedLocation.lat.toFixed(6)}, 経度: {editedLocation.lon.toFixed(6)}
+                    </p>
+                  )}
                   <div className="mt-2 h-48 rounded-lg overflow-hidden">
                     <LocationMap 
                       items={[{...item, metadata: {...item.metadata, location: editedLocation}}]} 

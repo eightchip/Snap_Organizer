@@ -581,7 +581,14 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
                     <div>
               {editedLocation ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-700">{editedLocation.name || `緯度: ${editedLocation.lat.toFixed(4)}, 経度: ${editedLocation.lon.toFixed(4)}`}</p>
+                  {editedLocation.name && (
+                    <p className="font-bold text-lg text-blue-800 mb-1">{editedLocation.name}</p>
+                  )}
+                  {editedLocation.name ? (
+                    <p className="text-xs text-gray-400">緯度: {editedLocation.lat.toFixed(6)}, 経度: {editedLocation.lon.toFixed(6)}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500">緯度: {editedLocation.lat.toFixed(4)}, 経度: {editedLocation.lon.toFixed(4)}</p>
+                  )}
                   <div className="h-40 rounded-md overflow-hidden">
                     <LocationMap items={[{ 
                       id: 'temp-location-item', 
@@ -608,7 +615,14 @@ export const DetailGroupScreen: React.FC<DetailGroupScreenProps> = ({
             <div>
               {group.metadata?.location ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-700">{group.metadata.location.name || `緯度: ${group.metadata.location.lat.toFixed(4)}, 経度: ${group.metadata.location.lon.toFixed(4)}`}</p>
+                  {group.metadata.location.name && (
+                    <p className="font-bold text-lg text-blue-800 mb-1">{group.metadata.location.name}</p>
+                  )}
+                  {group.metadata.location.name ? (
+                    <p className="text-xs text-gray-400">緯度: {group.metadata.location.lat.toFixed(6)}, 経度: {group.metadata.location.lon.toFixed(6)}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500">緯度: {group.metadata.location.lat.toFixed(4)}, 経度: {group.metadata.location.lon.toFixed(4)}</p>
+                  )}
                   <div className="h-40 rounded-md overflow-hidden">
                     <LocationMap items={[]} groups={[group]} />
                   </div>
