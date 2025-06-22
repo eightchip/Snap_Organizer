@@ -1,5 +1,7 @@
 import { StorageData } from '../types';
 import { initDB, deleteImageBlob, saveAppIconToDB, loadAppIconFromDB, deleteAppIconFromDB } from './imageDB';
+import { DBSchema, openDB } from 'idb';
+import { PhotoItem, PostalItemGroup, Tag } from '../types';
 
 // openDB, IDBPDatabase, DB_NAME, DB_VERSION, STORE_NAME, DATA_STORE, META_STORE, db, initDB などの定義・importは全て削除
 
@@ -32,6 +34,7 @@ export const saveAllData = async (data: StorageData): Promise<void> => {
 
   // 新しいデータ全体を保存する
   await database.put('data', data, 'storage_data');
+  console.log('Data saved successfully:');
 };
 
 // 統合データの読み込み
