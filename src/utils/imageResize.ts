@@ -9,6 +9,7 @@ async function loadWasmModule() {
       // ブラウザ環境でのみWASMを読み込みテスト
       if (typeof window !== 'undefined') {
         const module = await import('../pkg/your_wasm_pkg');
+        console.log('WASM module:', module);
         wasmModule = module;
       }
     } catch (error) {
