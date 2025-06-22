@@ -234,7 +234,7 @@ function App() {
     navigateTo({ type: 'detail-group', groupId });
   };
 
-  const handleBulkTagRename = async (oldName: string, newName: string) => {
+  const handleBulkTagRename = async (oldName: string, newName: string, updatedTags: Tag[]) => {
     setError(null);
     try {
       const currentData = await loadAllData();
@@ -247,15 +247,15 @@ function App() {
         tags: (group.tags || []).map(t => t === oldName ? newName : t)
       }));
       
-      const updatedData = { ...currentData, items: updatedItems, groups: updatedGroups };
+      const updatedData = { ...currentData, items: updatedItems, groups: updatedGroups, tags: updatedTags };
       await saveAllData(updatedData);
 
-      // Update local state
       setItems(updatedItems);
       setGroups(updatedGroups);
+      setTags(updatedTags);
     } catch (error: any) {
       setError(error.message || 'タグの一括変更に失敗しました');
-      console.error('Tag rename error:', error);
+      console.error('Bulk tag rename error:', error);
     }
   };
 
@@ -325,13 +325,18 @@ function App() {
   };
 
   const handleEditTag = (idx: number|null, name: string, color: string) => {
-    if (idx === null || !name.trim()) return;
-    const updated = tags.map((t, i) => i === idx ? { name: name.trim(), color } : t);
-    setTags(updated);
-    setTagEditIdx(null);
-    setTagEditName('');
-    setTagEditColor('#3B82F6');
-    saveAllData({ items, groups, tags: updated });
+    if (idx === null) return;
+    const oldTag = tags[idx];
+    const newTags = [...tags];
+    newTags[idx] = { name, color };
+    setTags(newTags);
+
+    if (oldTag.name !== name) {
+      handleBulkTagRename(oldTag.name, name, newTags);
+    } else {
+      saveAllData({ items, groups, tags: newTags });
+    }
+    handleCancelEdit();
   };
 
   const handleCancelEdit = () => {

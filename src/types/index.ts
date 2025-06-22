@@ -72,7 +72,8 @@ export interface HomeScreenProps {
   onAddItem: (mode: 'single' | 'group') => void;
   onItemClick: (itemId: string) => void;
   onGroupClick: (groupId: string) => void;
-  onBulkTagRename: (oldName: string, newName: string) => void;
+  onBulkTagRename: (oldName: string, newName: string, updatedTags: Tag[]) => void;
   onImport: (data: any) => void;
   onExport: () => void;
+  getExportData: () => Promise<any>;
 }
