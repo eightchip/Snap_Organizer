@@ -6,7 +6,7 @@ let wasmInitialized = false;
 async function loadWasmModule() {
   if (!wasmModule) {
     try {
-      // ブラウザ環境でのみWASMを読み込み
+      // ブラウザ環境でのみWASMを読み込みテスト
       if (typeof window !== 'undefined') {
         const module = await import('../pkg/your_wasm_pkg');
         wasmModule = module;
