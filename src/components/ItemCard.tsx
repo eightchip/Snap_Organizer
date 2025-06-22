@@ -9,9 +9,10 @@ interface ItemCardProps {
   onClick: () => void;
   imageUrl?: string;
   availableTags: Tag[];
+  onPhotoClick?: (photoIdx: number) => void;
 }
 
-export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageUrl, availableTags }) => {
+export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageUrl, availableTags, onPhotoClick }) => {
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('ja-JP', {
       year: 'numeric',
@@ -87,6 +88,20 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, group, onClick, imageU
         onClick={onClick}
         className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
       >
+        {/* 横スクロールサムネイル */}
+        <div className="bg-gray-100 overflow-x-auto flex gap-2 items-center px-2" style={{ height: 100 }} onClick={e => e.stopPropagation()}>
+          {group.photos.map((photo, idx) => (
+            <img
+              key={photo.id}
+              src={photo.image}
+              alt={`グループ写真${idx+1}`}
+              className="h-20 w-auto rounded shadow cursor-pointer border-2 border-gray-200 hover:border-blue-400"
+              onClick={() => onPhotoClick && onPhotoClick(idx)}
+              style={{ flex: '0 0 auto' }}
+            />
+          ))}
+        </div>
+        {/* 1枚目をサムネイルとして大きく表示（従来通り） */}
         <div className="bg-gray-100 overflow-hidden flex items-center justify-center" style={{ height: 160 }}>
           <img
             src={imageUrl}

@@ -15,6 +15,7 @@ import { imageToDataURL } from '../../utils/ocr';
 import { SyncManager } from '../../utils/syncUtils';
 import { shareDataViaEmail } from '../../utils/share';
 import { LocationMap } from '../LocationMap';
+import PhotoGalleryModal from '../components/PhotoGalleryModal';
 
 interface HomeScreenProps {
   items: PhotoItem[];
@@ -125,6 +126,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // AND/OR切り替え用state
   const [tagFilterMode, setTagFilterMode] = useState<'AND' | 'OR'>('AND');
+
+  // 全画面ギャラリーモーダル用state
+  const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
+  const [galleryIndex, setGalleryIndex] = useState<number>(0);
+  const [showGallery, setShowGallery] = useState(false);
 
   // 画像URLの読み込み
   useEffect(() => {
@@ -919,6 +925,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   onClick={isSelectionMode ? () => handleToggleSelection(group.id, 'group') : () => onGroupClick(group.id)}
                   imageUrl={group.photos[0] ? imageUrlMap[group.photos[0].image] : undefined}
                   availableTags={availableTags}
+                  onPhotoClick={(idx) => {
+                    setGalleryPhotos(group.photos.map(p => imageUrlMap[p.image] || ''));
+                    setGalleryIndex(idx);
+                    setShowGallery(true);
+                  }}
                 />
               </div>
             ))}
@@ -1033,6 +1044,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* 全画面ギャラリーモーダル */}
+      {showGallery && (
+        <PhotoGalleryModal
+          photos={galleryPhotos}
+          initialIndex={galleryIndex}
+          onClose={() => setShowGallery(false)}
+        />
       )}
     </div>
   );
