@@ -274,15 +274,16 @@ function App() {
   const handleBulkTagRename = async (oldName: string, newName: string, currentTags?: Tag[]) => {
     setError(null);
     try {
-      const tagsToSave = currentTags || tags;
+      // newNameが空文字の場合はタグをアイテムから削除するだけ。タグリスト自体の更新はしない。
+      const tagsToSave = currentTags ? currentTags : tags;
 
       const nextItems = items.map(item => ({
         ...item,
-        tags: (item.tags || []).map(t => (t === oldName ? newName : t)).filter(Boolean)
+        tags: (item.tags || []).map(t => (t === oldName ? newName : t)).filter(t => t) // filter(t=>t)で空文字を削除
       }));
       const nextGroups = groups.map(group => ({
         ...group,
-        tags: (group.tags || []).map(t => (t === oldName ? newName : t)).filter(Boolean)
+        tags: (group.tags || []).map(t => (t === oldName ? newName : t)).filter(t => t) // filter(t=>t)で空文字を削除
       }));
       
       const nextStorageData = { items: nextItems, groups: nextGroups, tags: tagsToSave };
@@ -290,6 +291,7 @@ function App() {
       
       setItems(nextItems);
       setGroups(nextGroups);
+      // currentTagsが渡された時だけtags stateを更新する（タグ自体の編集時）
       if (currentTags) {
         setTags(currentTags);
       }
@@ -337,17 +339,28 @@ function App() {
   };
 
   const handleEditTag = async (idx: number|null, name: string, color: string) => {
-    if (idx === null || !name.trim()) return;
+    if (idx === null || !name.trim()) {
+      handleCancelEdit();
+      return;
+    }
 
     const oldTag = tags[idx];
     const trimmedName = name.trim();
     
+    // 何も変更がない場合は何もしない
+    if (oldTag.name === trimmedName && oldTag.color === color) {
+      handleCancelEdit();
+      return;
+    }
+
     const nextTags = [...tags];
     nextTags[idx] = { name: trimmedName, color };
 
     if (oldTag.name !== trimmedName) {
+      // 名前が変更された場合は、タグリストとアイテム内のタグの両方を更新
       await handleBulkTagRename(oldTag.name, trimmedName, nextTags);
     } else {
+      // 色のみが変更された場合は、タグリストのみを更新
       const nextStorageData = { items, groups, tags: nextTags };
       await saveAllData(nextStorageData);
       setTags(nextTags);
@@ -366,16 +379,10 @@ function App() {
     const tagToRemove = tags[idx];
     if (window.confirm(`タグ「${tagToRemove.name}」を削除しますか？このタグはすべてのアイテムから削除されます。`)) {
       const nextTags = tags.filter((_, i) => i !== idx);
-      // Call bulk rename with an empty new name to effectively remove the tag from items/groups
+      // タグを削除し、関連するアイテムからもタグを除く
       await handleBulkTagRename(tagToRemove.name, '', nextTags);
     }
   };
-
-  const handleTagDeleteFromItem = async (tagName: string) => {
-    if (window.confirm(`このアイテムからタグ「${tagName}」を削除しますか？`)) {
-        await handleBulkTagRename(tagName, '');
-    }
-  }
 
   const renderScreen = () => {
     switch (appState.screen.type) {
@@ -384,6 +391,7 @@ function App() {
           <HomeScreen
             items={items}
             groups={groups}
+            tags={tags}
             searchQuery={searchQuery}
             selectedTags={selectedTags}
             onSearchChange={handleSearchChange}
@@ -391,28 +399,22 @@ function App() {
             onAddItem={handleAddItem}
             onItemClick={handleItemClick}
             onGroupClick={handleGroupClick}
-            onBulkTagRename={handleBulkTagRename}
-            onImport={handleImport}
-            onExport={handleDownloadExport}
-            getExportData={handleExport}
-            onBulkDelete={handleBulkDelete}
-            availableTags={tags}
+            onNavigateToSync={() => navigateTo({ type: 'sync' })}
             showAddTag={showAddTag}
             setShowAddTag={setShowAddTag}
             newTagName={newTagName}
             setNewTagName={setNewTagName}
             newTagColor={newTagColor}
             setNewTagColor={setNewTagColor}
+            onAddTag={handleAddTag}
             tagEditIdx={tagEditIdx}
             tagEditName={tagEditName}
-            setTagEditName={setTagEditName}
             tagEditColor={tagEditColor}
-            setTagEditColor={setTagEditColor}
-            handleAddTag={handleAddTag}
             startEditTag={startEditTag}
             handleEditTag={handleEditTag}
             handleCancelEdit={handleCancelEdit}
             handleRemoveTag={handleRemoveTag}
+            onBulkDelete={handleBulkDelete}
           />
         );
 
@@ -450,7 +452,7 @@ function App() {
             }}
             availableTags={tags}
             onAddTagToItem={handleAddTag}
-            onDeleteTagFromItem={handleTagDeleteFromItem}
+            onDeleteTagFromItem={handleRemoveTag}
           />
         );
 
@@ -476,8 +478,9 @@ function App() {
             }}
             availableTags={tags}
             onAddTagToGroup={handleAddTag}
-            onDeleteTagFromGroup={handleTagDeleteFromItem}
+            onDeleteTagFromGroup={handleRemoveTag}
             onUpdateItemInGroup={handleUpdateItem}
+            onBulkDelete={() => handleBulkDelete([], [group.id])}
           />
         );
 
@@ -489,6 +492,7 @@ function App() {
             tags={tags}
             onBack={() => navigateTo({ type: 'home' })}
             onImport={handleImport}
+            onExport={handleDownloadExport}
           />
         );
 
