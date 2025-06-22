@@ -1,7 +1,7 @@
 // WASMモジュールと初期化状態を管理する変数
 let wasmApi: {
-  batch_resize_images: (images: Uint8Array[], qualities: Float32Array, max_width: number, max_height: number) => Promise<any>;
-  preprocess_image_for_ocr: (base64Image: string) => Promise<string>;
+  batch_resize_images: (images: any, qualities: any, max_width: number, max_height: number) => any;
+  preprocess_image_for_ocr: (base64Image: string) => string;
   // 他のWASM関数もここに追加できます
 } | null = null;
 let wasmInitPromise: Promise<void> | null = null;
@@ -17,11 +17,12 @@ async function initializeWasm() {
   wasmInitPromise = (async () => {
     try {
       console.log('Initializing WASM module...');
-      // wasm-packが生成したモジュールを動的にインポート
+      // wasm-packが生成したモジュールを動的にインポート（相対パスを使用）
       // @ts-ignore
-      const wasm = await import('/your-wasm-pkg/pkg/your_wasm_pkg.js');
+      const wasm = await import('../../your-wasm-pkg/pkg/your_wasm_pkg.js');
       
       // 'default'エクスポートは通常、WASMの初期化関数
+      // wasm-packの出力はinit関数をdefaultとしてエクスポートする
       await wasm.default();
 
       // エクスポートされた関数をAPIオブジェクトに格納
@@ -31,7 +32,9 @@ async function initializeWasm() {
       };
 
       console.log('WASM module initialized successfully.');
-      console.log('Available WASM functions:', Object.keys(wasmApi));
+      if (wasmApi) {
+        console.log('Available WASM functions:', Object.keys(wasmApi));
+      }
     } catch (error) {
       console.error('Failed to initialize WASM module:', error);
       // エラーが発生した場合、後続の処理がフォールバックできるようにnullのままにする
