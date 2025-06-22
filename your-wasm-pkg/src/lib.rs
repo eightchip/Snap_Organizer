@@ -188,3 +188,29 @@ pub fn preprocess_image_for_ocr(base64_image: &str) -> Result<String, JsValue> {
     log("Image preprocessing completed successfully");
     Ok(base64_output)
 }
+
+#[wasm_bindgen]
+pub fn batch_resize_images(
+    images: js_sys::Array,      // JSから渡されるUint8Array[]（画像バイナリ配列）
+    qualities: js_sys::Array,   // JSから渡されるf32[]（品質配列）
+    max_width: u32,
+    max_height: u32,
+) -> js_sys::Array {
+    let mut result = js_sys::Array::new();
+    for (i, img_val) in images.iter().enumerate() {
+        let img_bytes = js_sys::Uint8Array::new(&img_val).to_vec();
+        let quality = qualities.get(i as u32).as_f64().unwrap_or(0.8) as f32;
+        // 画像デコード
+        if let Ok(img) = image::load_from_memory(&img_bytes) {
+            // リサイズ
+            let resized = img.thumbnail(max_width, max_height);
+            // JPEGエンコード
+            let mut buf = Cursor::new(Vec::new());
+            let _ = resized.write_to(&mut buf, image::ImageOutputFormat::Jpeg((quality * 100.0) as u8));
+            // JSのUint8Arrayに変換してpush
+            let js_buf = js_sys::Uint8Array::from(buf.get_ref().as_slice());
+            result.push(&js_buf);
+        }
+    }
+    result
+}
