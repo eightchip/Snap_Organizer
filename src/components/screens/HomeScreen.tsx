@@ -431,18 +431,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     setImportError(null);
     try {
       const data = JSON.parse(importText);
-      // タグのマージ処理
-      if (data.tags && Array.isArray(data.tags)) {
-        const existing = localStorage.getItem('postal_tags');
-        let mergedTags = data.tags;
-        if (existing) {
-          const existingTags = JSON.parse(existing);
-          const existingNames = new Set(existingTags.map((t: { name: string }) => t.name));
-          const newTags = data.tags.filter((t: { name: string }) => !existingNames.has(t.name));
-          mergedTags = [...existingTags, ...newTags];
-        }
-        localStorage.setItem('postal_tags', JSON.stringify(mergedTags));
-      }
       onImport(data);
       setShowImportModal(false);
       setImportText('');
