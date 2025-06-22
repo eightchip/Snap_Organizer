@@ -534,7 +534,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         className="hidden"
         accept="image/*"
       />
-      <header className="sticky top-0 z-30 bg-gradient-to-r from-gray-50 to-blue-50 backdrop-blur-sm shadow-sm">
+      <header
+        className="sticky top-0 z-30 bg-gradient-to-r from-blue-50 via-white to-blue-100 backdrop-blur-md bg-opacity-80 shadow-md animate-fade-in-down transition-all duration-500"
+      >
         <div className="max-w-md mx-auto px-4">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center gap-2">
@@ -565,21 +567,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               ) : (
                 <button
                   onClick={() => iconInputRef.current?.click()}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 text-gray-600 hover:bg-blue-100 hover:text-blue-600 rounded-lg transition-all duration-200 hover:scale-125 hover:shadow-lg active:animate-flash"
                   title="アイコンを設定"
                 >
                   <Image className="h-5 w-5" />
                 </button>
               )}
-              <button onClick={() => setShowImportModal(true)} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="インポート">
+              <button onClick={() => setShowImportModal(true)} className="p-2 rounded-full hover:bg-blue-100 hover:text-blue-600 transition-all duration-200 hover:scale-125 hover:shadow-lg active:animate-flash" title="インポート">
                 <Download className="w-6 h-6" />
               </button>
-              <button onClick={handleExportClick} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="エクスポート/共有">
+              <button onClick={handleExportClick} className="p-2 rounded-full hover:bg-blue-100 hover:text-blue-600 transition-all duration-200 hover:scale-125 hover:shadow-lg active:animate-flash" title="エクスポート/共有">
                 <Upload className="w-6 h-6" />
               </button>
             </div>
           </div>
         </div>
+        {/* アクセントライン */}
+        <div className="h-1 bg-blue-400 w-0 animate-grow-line rounded-b-lg" />
       </header>
 
       <div className="sticky top-0 bg-white shadow-sm z-10">
