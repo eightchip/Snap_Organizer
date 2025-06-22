@@ -924,6 +924,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   onClick={isSelectionMode ? () => handleToggleSelection(group.id, 'group') : () => onGroupClick(group.id)}
                   imageUrl={group.photos[0] ? imageUrlMap[group.photos[0].image] : undefined}
                   availableTags={availableTags}
+                  imageUrlMap={imageUrlMap}
                   onPhotoClick={(idx) => {
                     setGalleryPhotos(group.photos.map(p => imageUrlMap[p.image] || ''));
                     setGalleryIndex(idx);
