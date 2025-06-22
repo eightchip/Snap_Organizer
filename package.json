@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:wasm && vite build",
     "build:wasm": "cd your-wasm-pkg && wasm-pack build --target web",
     "build:full": "npm run build:wasm && vite build",
     "lint": "eslint .",
