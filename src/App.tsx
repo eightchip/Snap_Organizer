@@ -210,10 +210,12 @@ function App() {
     try {
       if ('photos' in data) {
         // Group mode
-        await addGroup(data);
+        addGroup(data);
+        await saveAllData({ items, groups: [...groups, data], tags });
       } else {
         // Single photo mode
-        await addItem(data);
+        addItem(data);
+        await saveAllData({ items: [...items, data], groups, tags });
       }
       navigateTo({ type: 'home' });
     } catch (error: any) {
@@ -223,7 +225,13 @@ function App() {
   };
 
   const handleUpdateItem = (itemId: string, updates: Partial<PhotoItem>) => {
-    updateItem(itemId, updates);
+    updateItem(itemId, updates).then(() => {
+      // This is not ideal, but usePostalItems doesn't return the new state
+      // A better solution would be to refactor usePostalItems to handle state transactionally
+      setTimeout(() => {
+        saveAllData({ items, groups, tags });
+      }, 0);
+    });
   };
 
   const handleItemClick = (itemId: string) => {
@@ -425,8 +433,12 @@ function App() {
             availableTags={tags}
             onBack={() => navigateTo({ type: 'home' })}
             onUpdate={(updates) => handleUpdateItem(item.id, updates)}
-            onDelete={async () => {
-              await deleteItem(item.id);
+            onDelete={() => {
+              deleteItem(item.id).then(() => {
+                setTimeout(() => {
+                  saveAllData({ items, groups, tags });
+                }, 0);
+              });
               navigateTo({ type: 'home' });
             }}
           />
@@ -440,9 +452,17 @@ function App() {
             group={group}
             availableTags={tags}
             onBack={() => navigateTo({ type: 'home' })}
-            onUpdate={(updates) => updateGroup(group.id, updates)}
-            onDelete={async () => {
-              await deleteGroup(group.id);
+            onUpdate={(updates) => updateGroup(group.id, updates).then(() => {
+              setTimeout(() => {
+                saveAllData({ items, groups, tags });
+              }, 0);
+            })}
+            onDelete={() => {
+              deleteGroup(group.id).then(() => {
+                setTimeout(() => {
+                  saveAllData({ items, groups, tags });
+                }, 0);
+              });
               navigateTo({ type: 'home' });
             }}
             showAddTag={showAddTag}
